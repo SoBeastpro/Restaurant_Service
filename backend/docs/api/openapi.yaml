@@ -1,0 +1,1665 @@
+openapi: 3.1.0
+
+info:
+  title: REST Restaurant API
+  version: 0.1.0
+  description: |
+    Черновой API-контракт приложения REST.
+
+servers:
+  - url: /api/v1
+    description: Базовый путь API
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Auth
+  - name: Profile
+  - name: Restaurants
+  - name: Employees
+  - name: Invitations
+  - name: Halls
+  - name: Tables
+  - name: Shifts
+  - name: Attendance
+  - name: Tasks
+  - name: Task templates
+  - name: Notifications
+  - name: Statistics
+  - name: Audit
+  - name: Subscription
+  - name: Platform
+
+paths:
+  /auth/register-manager:
+    post:
+      tags: [Auth]
+      summary: Зарегистрировать менеджера
+      operationId: registerManager
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterManagerRequest"
+      responses:
+        "201":
+          $ref: "#/components/responses/Created"
+        default:
+          $ref: "#/components/responses/Error"
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Выполнить вход
+      operationId: login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Вход выполнен
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenPair"
+        default:
+          $ref: "#/components/responses/Error"
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Обновить пару токенов
+      operationId: refreshTokens
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshTokenRequest"
+      responses:
+        "200":
+          description: Токены обновлены
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenPair"
+        default:
+          $ref: "#/components/responses/Error"
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Завершить текущую сессию
+      operationId: logout
+      responses:
+        "204":
+          $ref: "#/components/responses/NoContent"
+
+  /auth/logout-all:
+    post:
+      tags: [Auth]
+      summary: Завершить все сессии пользователя
+      operationId: logoutAll
+      responses:
+        "204":
+          $ref: "#/components/responses/NoContent"
+
+  /auth/email/verify:
+    post:
+      tags: [Auth]
+      summary: Подтвердить email
+      operationId: verifyEmail
+      security: []
+      requestBody:
+        $ref: "#/components/requestBodies/TokenRequest"
+      responses:
+        "204":
+          $ref: "#/components/responses/NoContent"
+        default:
+          $ref: "#/components/responses/Error"
+
+  /auth/email/resend:
+    post:
+      tags: [Auth]
+      summary: Повторно отправить подтверждение email
+      operationId: resendEmailVerification
+      security: []
+      requestBody:
+        $ref: "#/components/requestBodies/LoginValueRequest"
+      responses:
+        "204":
+          $ref: "#/components/responses/NoContent"
+
+  /auth/password/forgot:
+    post:
+      tags: [Auth]
+      summary: Запросить восстановление пароля
+      operationId: forgotPassword
+      security: []
+      requestBody:
+        $ref: "#/components/requestBodies/LoginValueRequest"
+      responses:
+        "204":
+          $ref: "#/components/responses/NoContent"
+
+  /auth/password/reset:
+    post:
+      tags: [Auth]
+      summary: Установить новый пароль по токену
+      operationId: resetPassword
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResetPasswordRequest"
+      responses:
+        "204":
+          $ref: "#/components/responses/NoContent"
+        default:
+          $ref: "#/components/responses/Error"
+
+  /auth/password/change:
+    post:
+      tags: [Auth]
+      summary: Изменить пароль
+      operationId: changePassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangePasswordRequest"
+      responses:
+        "204":
+          $ref: "#/components/responses/NoContent"
+
+  /auth/sessions:
+    get:
+      tags: [Auth]
+      summary: Получить активные сессии
+      operationId: listSessions
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /auth/sessions/{sessionId}:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+    delete:
+      tags: [Auth]
+      summary: Завершить выбранную сессию
+      operationId: deleteSession
+      responses:
+        "204":
+          $ref: "#/components/responses/NoContent"
+
+  /me:
+    get:
+      tags: [Profile]
+      summary: Получить свой профиль
+      operationId: getMyProfile
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    patch:
+      tags: [Profile]
+      summary: Изменить свой профиль
+      operationId: updateMyProfile
+      requestBody:
+        $ref: "#/components/requestBodies/JsonBody"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /me/restaurants:
+    get:
+      tags: [Profile]
+      summary: Получить рестораны и роли текущего пользователя
+      operationId: listMyRestaurants
+      responses:
+        "200":
+          description: Доступные профили пользователя в ресторанах
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RestaurantMembershipSummary"
+
+  /me/avatar:
+    post:
+      tags: [Profile]
+      summary: Загрузить фотографию профиля
+      operationId: uploadMyAvatar
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    delete:
+      tags: [Profile]
+      summary: Удалить фотографию профиля
+      operationId: deleteMyAvatar
+      responses:
+        "204":
+          $ref: "#/components/responses/NoContent"
+
+  /me/permissions:
+    get:
+      tags: [Profile]
+      summary: Получить permissions текущего пользователя
+      operationId: getMyPermissions
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /me/current-shift:
+    get:
+      tags: [Profile]
+      summary: Получить текущую смену пользователя
+      operationId: getMyCurrentShift
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /me/notifications:
+    get:
+      tags: [Notifications]
+      summary: Получить уведомления
+      operationId: listMyNotifications
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Size"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /me/notifications/{notificationId}/read:
+    parameters:
+      - $ref: "#/components/parameters/NotificationId"
+    patch:
+      tags: [Notifications]
+      summary: Отметить уведомление прочитанным
+      operationId: readNotification
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /me/notifications/read-all:
+    post:
+      tags: [Notifications]
+      summary: Отметить все уведомления прочитанными
+      operationId: readAllNotifications
+      responses:
+        "204":
+          $ref: "#/components/responses/NoContent"
+
+  /me/devices:
+    post:
+      tags: [Notifications]
+      summary: Зарегистрировать push-токен устройства
+      operationId: registerDevice
+      requestBody:
+        $ref: "#/components/requestBodies/JsonBody"
+      responses:
+        "201":
+          $ref: "#/components/responses/Created"
+
+  /me/devices/{deviceId}:
+    parameters:
+      - $ref: "#/components/parameters/DeviceId"
+    delete:
+      tags: [Notifications]
+      summary: Удалить устройство
+      operationId: deleteDevice
+      responses:
+        "204":
+          $ref: "#/components/responses/NoContent"
+
+  /restaurants:
+    post:
+      tags: [Restaurants]
+      summary: Создать ресторан
+      operationId: createRestaurant
+      requestBody:
+        $ref: "#/components/requestBodies/JsonBody"
+      responses:
+        "201":
+          $ref: "#/components/responses/Created"
+
+  /restaurants/{restaurantId}:
+    parameters:
+      - $ref: "#/components/parameters/RestaurantId"
+    get:
+      tags: [Restaurants]
+      summary: Получить профиль ресторана
+      operationId: getRestaurant
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    patch:
+      tags: [Restaurants]
+      summary: Изменить профиль ресторана
+      operationId: updateRestaurant
+      x-access: Manager
+      requestBody:
+        $ref: "#/components/requestBodies/JsonBody"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    delete:
+      tags: [Restaurants]
+      summary: Архивировать ресторан
+      operationId: archiveRestaurant
+      x-access: Manager
+      responses:
+        "204":
+          $ref: "#/components/responses/NoContent"
+
+  /restaurants/{restaurantId}/logo:
+    parameters:
+      - $ref: "#/components/parameters/RestaurantId"
+    post:
+      tags: [Restaurants]
+      summary: Загрузить логотип ресторана
+      operationId: uploadRestaurantLogo
+      x-access: Manager
+      requestBody:
+        $ref: "#/components/requestBodies/FileBody"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    delete:
+      tags: [Restaurants]
+      summary: Удалить логотип ресторана
+      operationId: deleteRestaurantLogo
+      x-access: Manager
+      responses:
+        "204":
+          $ref: "#/components/responses/NoContent"
+
+  /restaurants/{restaurantId}/employees:
+    parameters:
+      - $ref: "#/components/parameters/RestaurantId"
+    get:
+      tags: [Employees]
+      summary: Получить сотрудников ресторана
+      operationId: listEmployees
+      x-access: Manager
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /restaurants/{restaurantId}/employees/{employeeId}:
+    parameters:
+      - $ref: "#/components/parameters/RestaurantId"
+      - $ref: "#/components/parameters/EmployeeId"
+    get:
+      tags: [Employees]
+      summary: Получить карточку сотрудника
+      operationId: getEmployee
+      x-access: Manager
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    patch:
+      tags: [Employees]
+      summary: Изменить имя, фамилию или должность сотрудника
+      operationId: updateEmployee
+      x-access: Manager
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateEmployeeRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    delete:
+      tags: [Employees]
+      summary: Архивировать сотрудника
+      operationId: archiveEmployee
+      x-access: Manager
+      responses:
+        "204":
+          $ref: "#/components/responses/NoContent"
+
+  /restaurants/{restaurantId}/employees/{employeeId}/status:
+    parameters:
+      - $ref: "#/components/parameters/RestaurantId"
+      - $ref: "#/components/parameters/EmployeeId"
+    patch:
+      tags: [Employees]
+      summary: Изменить статус сотрудника
+      operationId: updateEmployeeStatus
+      x-access: Manager
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  $ref: "#/components/schemas/EmployeeStatus"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /restaurants/{restaurantId}/employees/{employeeId}/shifts:
+    parameters:
+      - $ref: "#/components/parameters/RestaurantId"
+      - $ref: "#/components/parameters/EmployeeId"
+    get:
+      tags: [Employees]
+      summary: Получить историю смен сотрудника
+      operationId: listEmployeeShifts
+      x-access: Manager
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /restaurants/{restaurantId}/employees/{employeeId}/statistics:
+    parameters:
+      - $ref: "#/components/parameters/RestaurantId"
+      - $ref: "#/components/parameters/EmployeeId"
+    get:
+      tags: [Statistics]
+      summary: Получить статистику сотрудника
+      operationId: getEmployeeStatistics
+      x-access: Manager
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /restaurants/{restaurantId}/invitations:
+    parameters:
+      - $ref: "#/components/parameters/RestaurantId"
+    get:
+      tags: [Invitations]
+      summary: Получить приглашения ресторана
+      operationId: listInvitations
+      x-access: Manager
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    post:
+      tags: [Invitations]
+      summary: Создать сотрудника и приглашение
+      operationId: createInvitation
+      x-access: Manager
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateInvitationRequest"
+      responses:
+        "201":
+          description: Приглашение создано
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvitationResponse"
+        default:
+          $ref: "#/components/responses/Error"
+
+  /restaurants/{restaurantId}/invitations/{invitationId}:
+    parameters:
+      - $ref: "#/components/parameters/RestaurantId"
+      - $ref: "#/components/parameters/InvitationId"
+    delete:
+      tags: [Invitations]
+      summary: Отозвать приглашение
+      operationId: revokeInvitation
+      x-access: Manager
+      responses:
+        "204":
+          $ref: "#/components/responses/NoContent"
+
+  /restaurants/{restaurantId}/invitations/{invitationId}/resend:
+    parameters:
+      - $ref: "#/components/parameters/RestaurantId"
+      - $ref: "#/components/parameters/InvitationId"
+    post:
+      tags: [Invitations]
+      summary: Перевыпустить или повторно отправить приглашение
+      operationId: resendInvitation
+      x-access: Manager
+      responses:
+        "200":
+          description: Приглашение обновлено
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvitationResponse"
+
+  /invitations/{token}:
+    parameters:
+      - $ref: "#/components/parameters/InvitationToken"
+    get:
+      tags: [Invitations]
+      summary: Проверить приглашение
+      operationId: getInvitationByToken
+      security: []
+      responses:
+        "200":
+          description: Данные приглашения
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicInvitationResponse"
+        default:
+          $ref: "#/components/responses/Error"
+
+  /invitations/{token}/accept:
+    parameters:
+      - $ref: "#/components/parameters/InvitationToken"
+    post:
+      tags: [Invitations]
+      summary: Принять приглашение и активировать аккаунт
+      operationId: acceptInvitation
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AcceptInvitationRequest"
+      responses:
+        "200":
+          description: Аккаунт активирован
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenPair"
+        default:
+          $ref: "#/components/responses/Error"
+
+  /restaurants/{restaurantId}/halls:
+    parameters:
+      - $ref: "#/components/parameters/RestaurantId"
+    get:
+      tags: [Halls]
+      summary: Получить залы ресторана
+      operationId: listHalls
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    post:
+      tags: [Halls]
+      summary: Создать зал
+      operationId: createHall
+      x-access: Manager
+      requestBody:
+        $ref: "#/components/requestBodies/JsonBody"
+      responses:
+        "201":
+          $ref: "#/components/responses/Created"
+
+  /restaurants/{restaurantId}/halls/{hallId}:
+    parameters:
+      - $ref: "#/components/parameters/RestaurantId"
+      - $ref: "#/components/parameters/HallId"
+    get:
+      tags: [Halls]
+      summary: Получить зал и его план
+      operationId: getHall
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    patch:
+      tags: [Halls]
+      summary: Изменить зал
+      operationId: updateHall
+      x-access: Manager
+      requestBody:
+        $ref: "#/components/requestBodies/JsonBody"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    delete:
+      tags: [Halls]
+      summary: Архивировать зал
+      operationId: archiveHall
+      x-access: Manager
+      responses:
+        "204":
+          $ref: "#/components/responses/NoContent"
+
+  /restaurants/{restaurantId}/halls/{hallId}/tables:
+    parameters:
+      - $ref: "#/components/parameters/RestaurantId"
+      - $ref: "#/components/parameters/HallId"
+    post:
+      tags: [Tables]
+      summary: Добавить стол в зал
+      operationId: createTable
+      x-access: Manager
+      requestBody:
+        $ref: "#/components/requestBodies/JsonBody"
+      responses:
+        "201":
+          $ref: "#/components/responses/Created"
+
+  /restaurants/{restaurantId}/tables:
+    parameters:
+      - $ref: "#/components/parameters/RestaurantId"
+    get:
+      tags: [Tables]
+      summary: Получить столы ресторана
+      operationId: listTables
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /restaurants/{restaurantId}/tables/{tableId}:
+    parameters:
+      - $ref: "#/components/parameters/RestaurantId"
+      - $ref: "#/components/parameters/TableId"
+    get:
+      tags: [Tables]
+      summary: Получить стол
+      operationId: getTable
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    patch:
+      tags: [Tables]
+      summary: Изменить стол
+      operationId: updateTable
+      x-access: Manager
+      requestBody:
+        $ref: "#/components/requestBodies/JsonBody"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    delete:
+      tags: [Tables]
+      summary: Архивировать стол
+      operationId: archiveTable
+      x-access: Manager
+      responses:
+        "204":
+          $ref: "#/components/responses/NoContent"
+
+  /restaurants/{restaurantId}/tables/{tableId}/status-changes:
+    parameters:
+      - $ref: "#/components/parameters/RestaurantId"
+      - $ref: "#/components/parameters/TableId"
+    post:
+      tags: [Tables]
+      summary: Изменить состояние стола
+      operationId: changeTableStatus
+      x-access: TBD
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangeTableStatusRequest"
+      responses:
+        "201":
+          $ref: "#/components/responses/Created"
+
+  /restaurants/{restaurantId}/tables/{tableId}/status-history:
+    parameters:
+      - $ref: "#/components/parameters/RestaurantId"
+      - $ref: "#/components/parameters/TableId"
+    get:
+      tags: [Tables]
+      summary: Получить историю состояний стола
+      operationId: getTableStatusHistory
+      x-access: Manager
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /restaurants/{restaurantId}/shifts:
+    parameters:
+      - $ref: "#/components/parameters/RestaurantId"
+    get:
+      tags: [Shifts]
+      summary: Получить смены
+      operationId: listShifts
+      x-access: Manager
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    post:
+      tags: [Shifts]
+      summary: Запланировать смену
+      operationId: createShift
+      x-access: Manager
+      requestBody:
+        $ref: "#/components/requestBodies/JsonBody"
+      responses:
+        "201":
+          $ref: "#/components/responses/Created"
+
+  /restaurants/{restaurantId}/shifts/current:
+    parameters:
+      - $ref: "#/components/parameters/RestaurantId"
+    get:
+      tags: [Shifts]
+      summary: Получить активную смену ресторана
+      operationId: getCurrentShift
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /restaurants/{restaurantId}/shifts/{shiftId}:
+    parameters:
+      - $ref: "#/components/parameters/RestaurantId"
+      - $ref: "#/components/parameters/ShiftId"
+    get:
+      tags: [Shifts]
+      summary: Получить смену
+      operationId: getShift
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    patch:
+      tags: [Shifts]
+      summary: Изменить запланированную смену
+      operationId: updateShift
+      x-access: Manager
+      requestBody:
+        $ref: "#/components/requestBodies/JsonBody"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /restaurants/{restaurantId}/shifts/{shiftId}/start:
+    parameters:
+      - $ref: "#/components/parameters/RestaurantId"
+      - $ref: "#/components/parameters/ShiftId"
+    post:
+      tags: [Shifts]
+      summary: Начать смену
+      operationId: startShift
+      x-access: Manager
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /restaurants/{restaurantId}/shifts/{shiftId}/close:
+    parameters:
+      - $ref: "#/components/parameters/RestaurantId"
+      - $ref: "#/components/parameters/ShiftId"
+    post:
+      tags: [Shifts]
+      summary: Завершить смену
+      operationId: closeShift
+      x-access: Manager
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CloseShiftRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /restaurants/{restaurantId}/shifts/{shiftId}/report:
+    parameters:
+      - $ref: "#/components/parameters/RestaurantId"
+      - $ref: "#/components/parameters/ShiftId"
+    get:
+      tags: [Shifts]
+      summary: Получить отчёт смены
+      operationId: getShiftReport
+      x-access: Manager
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /restaurants/{restaurantId}/shifts/{shiftId}/participants:
+    parameters:
+      - $ref: "#/components/parameters/RestaurantId"
+      - $ref: "#/components/parameters/ShiftId"
+    get:
+      tags: [Attendance]
+      summary: Получить участников смены
+      operationId: listShiftParticipants
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    post:
+      tags: [Attendance]
+      summary: Добавить сотрудника в смену
+      operationId: addShiftParticipant
+      x-access: Manager
+      requestBody:
+        $ref: "#/components/requestBodies/JsonBody"
+      responses:
+        "201":
+          $ref: "#/components/responses/Created"
+
+  /restaurants/{restaurantId}/shifts/{shiftId}/participants/{employeeId}/check-in:
+    parameters:
+      - $ref: "#/components/parameters/RestaurantId"
+      - $ref: "#/components/parameters/ShiftId"
+      - $ref: "#/components/parameters/EmployeeId"
+    post:
+      tags: [Attendance]
+      summary: Зафиксировать приход сотрудника
+      operationId: checkInEmployee
+      x-access: Manager
+      requestBody:
+        $ref: "#/components/requestBodies/OptionalJsonBody"
+      responses:
+        "201":
+          $ref: "#/components/responses/Created"
+
+  /restaurants/{restaurantId}/shifts/{shiftId}/participants/{employeeId}/check-out:
+    parameters:
+      - $ref: "#/components/parameters/RestaurantId"
+      - $ref: "#/components/parameters/ShiftId"
+      - $ref: "#/components/parameters/EmployeeId"
+    post:
+      tags: [Attendance]
+      summary: Зафиксировать уход сотрудника
+      operationId: checkOutEmployee
+      x-access: Manager
+      requestBody:
+        $ref: "#/components/requestBodies/OptionalJsonBody"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /restaurants/{restaurantId}/shifts/{shiftId}/attendance:
+    parameters:
+      - $ref: "#/components/parameters/RestaurantId"
+      - $ref: "#/components/parameters/ShiftId"
+    get:
+      tags: [Attendance]
+      summary: Получить интервалы присутствия
+      operationId: getShiftAttendance
+      x-access: Manager
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /restaurants/{restaurantId}/tasks:
+    parameters:
+      - $ref: "#/components/parameters/RestaurantId"
+    get:
+      tags: [Tasks]
+      summary: Получить задачи
+      operationId: listTasks
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Size"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    post:
+      tags: [Tasks]
+      summary: Создать задачу
+      operationId: createTask
+      x-access: Manager
+      requestBody:
+        $ref: "#/components/requestBodies/JsonBody"
+      responses:
+        "201":
+          $ref: "#/components/responses/Created"
+
+  /restaurants/{restaurantId}/tasks/{taskId}:
+    parameters:
+      - $ref: "#/components/parameters/RestaurantId"
+      - $ref: "#/components/parameters/TaskId"
+    get:
+      tags: [Tasks]
+      summary: Получить задачу
+      operationId: getTask
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    patch:
+      tags: [Tasks]
+      summary: Изменить задачу
+      operationId: updateTask
+      x-access: Manager
+      requestBody:
+        $ref: "#/components/requestBodies/JsonBody"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    delete:
+      tags: [Tasks]
+      summary: Отменить или архивировать задачу
+      operationId: deleteTask
+      x-access: Manager
+      responses:
+        "204":
+          $ref: "#/components/responses/NoContent"
+
+  /restaurants/{restaurantId}/tasks/{taskId}/assign:
+    parameters:
+      - $ref: "#/components/parameters/RestaurantId"
+      - $ref: "#/components/parameters/TaskId"
+    post:
+      tags: [Tasks]
+      summary: Назначить задачу сотруднику
+      operationId: assignTask
+      x-access: Manager
+      requestBody:
+        $ref: "#/components/requestBodies/JsonBody"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /restaurants/{restaurantId}/tasks/{taskId}/status-changes:
+    parameters:
+      - $ref: "#/components/parameters/RestaurantId"
+      - $ref: "#/components/parameters/TaskId"
+    post:
+      tags: [Tasks]
+      summary: Изменить статус задачи
+      operationId: changeTaskStatus
+      x-access: TBD
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangeTaskStatusRequest"
+      responses:
+        "201":
+          $ref: "#/components/responses/Created"
+
+  /restaurants/{restaurantId}/tasks/{taskId}/history:
+    parameters:
+      - $ref: "#/components/parameters/RestaurantId"
+      - $ref: "#/components/parameters/TaskId"
+    get:
+      tags: [Tasks]
+      summary: Получить историю задачи
+      operationId: getTaskHistory
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /restaurants/{restaurantId}/tasks/{taskId}/carry-over:
+    parameters:
+      - $ref: "#/components/parameters/RestaurantId"
+      - $ref: "#/components/parameters/TaskId"
+    post:
+      tags: [Tasks]
+      summary: Перенести задачу без исполнителя в очередь следующей смены
+      operationId: carryOverTask
+      x-access: Manager
+      requestBody:
+        $ref: "#/components/requestBodies/JsonBody"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /restaurants/{restaurantId}/task-templates:
+    parameters:
+      - $ref: "#/components/parameters/RestaurantId"
+    get:
+      tags: [Task templates]
+      summary: Получить шаблоны задач
+      operationId: listTaskTemplates
+      x-access: Manager
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    post:
+      tags: [Task templates]
+      summary: Создать шаблон задачи
+      operationId: createTaskTemplate
+      x-access: Manager
+      requestBody:
+        $ref: "#/components/requestBodies/JsonBody"
+      responses:
+        "201":
+          $ref: "#/components/responses/Created"
+
+  /restaurants/{restaurantId}/task-templates/{templateId}:
+    parameters:
+      - $ref: "#/components/parameters/RestaurantId"
+      - $ref: "#/components/parameters/TemplateId"
+    get:
+      tags: [Task templates]
+      summary: Получить шаблон задачи
+      operationId: getTaskTemplate
+      x-access: Manager
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    patch:
+      tags: [Task templates]
+      summary: Изменить шаблон задачи
+      operationId: updateTaskTemplate
+      x-access: Manager
+      requestBody:
+        $ref: "#/components/requestBodies/JsonBody"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    delete:
+      tags: [Task templates]
+      summary: Удалить шаблон задачи
+      operationId: deleteTaskTemplate
+      x-access: Manager
+      responses:
+        "204":
+          $ref: "#/components/responses/NoContent"
+
+  /restaurants/{restaurantId}/task-templates/{templateId}/tasks:
+    parameters:
+      - $ref: "#/components/parameters/RestaurantId"
+      - $ref: "#/components/parameters/TemplateId"
+    post:
+      tags: [Task templates]
+      summary: Создать задачу из шаблона
+      operationId: createTaskFromTemplate
+      x-access: Manager
+      requestBody:
+        $ref: "#/components/requestBodies/OptionalJsonBody"
+      responses:
+        "201":
+          $ref: "#/components/responses/Created"
+
+  /restaurants/{restaurantId}/statistics/overview:
+    parameters:
+      - $ref: "#/components/parameters/RestaurantId"
+    get:
+      tags: [Statistics]
+      summary: Получить сводную статистику
+      operationId: getStatisticsOverview
+      x-access: Manager
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /restaurants/{restaurantId}/statistics/tasks:
+    parameters:
+      - $ref: "#/components/parameters/RestaurantId"
+    get:
+      tags: [Statistics]
+      summary: Получить статистику задач
+      operationId: getTaskStatistics
+      x-access: Manager
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /restaurants/{restaurantId}/statistics/tables:
+    parameters:
+      - $ref: "#/components/parameters/RestaurantId"
+    get:
+      tags: [Statistics]
+      summary: Получить статистику столов
+      operationId: getTableStatistics
+      x-access: Manager
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /restaurants/{restaurantId}/statistics/employees:
+    parameters:
+      - $ref: "#/components/parameters/RestaurantId"
+    get:
+      tags: [Statistics]
+      summary: Получить статистику сотрудников
+      operationId: getEmployeesStatistics
+      x-access: Manager
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /restaurants/{restaurantId}/audit-log:
+    parameters:
+      - $ref: "#/components/parameters/RestaurantId"
+    get:
+      tags: [Audit]
+      summary: Получить журнал действий ресторана
+      operationId: getRestaurantAuditLog
+      x-access: Manager
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /restaurants/{restaurantId}/subscription:
+    parameters:
+      - $ref: "#/components/parameters/RestaurantId"
+    get:
+      tags: [Subscription]
+      summary: Получить состояние подписки
+      operationId: getSubscription
+      x-access: Manager
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /restaurants/{restaurantId}/subscription/checkout:
+    parameters:
+      - $ref: "#/components/parameters/RestaurantId"
+    post:
+      tags: [Subscription]
+      summary: Начать оформление оплаты
+      operationId: createSubscriptionCheckout
+      x-access: Manager
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /restaurants/{restaurantId}/subscription/skip:
+    parameters:
+      - $ref: "#/components/parameters/RestaurantId"
+    post:
+      tags: [Subscription]
+      summary: Пропустить оплату в тестовом режиме
+      operationId: skipSubscription
+      x-access: Manager
+      responses:
+        "204":
+          $ref: "#/components/responses/NoContent"
+
+  /platform/restaurants:
+    get:
+      tags: [Platform]
+      summary: Получить рестораны платформы
+      operationId: platformListRestaurants
+      x-access: Platform admin
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /platform/restaurants/{restaurantId}/status:
+    parameters:
+      - $ref: "#/components/parameters/RestaurantId"
+    patch:
+      tags: [Platform]
+      summary: Изменить статус ресторана
+      operationId: platformUpdateRestaurantStatus
+      x-access: Platform admin
+      requestBody:
+        $ref: "#/components/requestBodies/JsonBody"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /platform/users:
+    get:
+      tags: [Platform]
+      summary: Получить пользователей платформы
+      operationId: platformListUsers
+      x-access: Platform admin
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /platform/users/{userId}/status:
+    parameters:
+      - $ref: "#/components/parameters/UserId"
+    patch:
+      tags: [Platform]
+      summary: Изменить статус пользователя
+      operationId: platformUpdateUserStatus
+      x-access: Platform admin
+      requestBody:
+        $ref: "#/components/requestBodies/JsonBody"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /platform/subscriptions:
+    get:
+      tags: [Platform]
+      summary: Получить подписки платформы
+      operationId: platformListSubscriptions
+      x-access: Platform admin
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /platform/audit-log:
+    get:
+      tags: [Platform]
+      summary: Получить журнал платформы
+      operationId: platformAuditLog
+      x-access: Platform admin
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /platform/system-events:
+    get:
+      tags: [Platform]
+      summary: Получить технические события
+      operationId: platformSystemEvents
+      x-access: Platform admin
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    RestaurantId:
+      name: restaurantId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    EmployeeId:
+      name: employeeId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    InvitationId:
+      name: invitationId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    InvitationToken:
+      name: token
+      in: path
+      required: true
+      schema: { type: string, minLength: 20 }
+    HallId:
+      name: hallId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    TableId:
+      name: tableId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    ShiftId:
+      name: shiftId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    TaskId:
+      name: taskId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    TemplateId:
+      name: templateId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    SessionId:
+      name: sessionId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    NotificationId:
+      name: notificationId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    DeviceId:
+      name: deviceId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    UserId:
+      name: userId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 0, default: 0 }
+    Size:
+      name: size
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+
+  requestBodies:
+    JsonBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/JsonObject"
+    OptionalJsonBody:
+      required: false
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/JsonObject"
+    TokenRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [token]
+            properties:
+              token: { type: string }
+    LoginValueRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [login]
+            properties:
+              login: { type: string }
+    FileBody:
+      required: true
+      content:
+        multipart/form-data:
+          schema:
+            type: object
+            required: [file]
+            properties:
+              file: { type: string, format: binary }
+
+  responses:
+    Ok:
+      description: Операция выполнена
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/JsonObject"
+    Created:
+      description: Объект создан
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/JsonObject"
+    NoContent:
+      description: Операция выполнена без тела ответа
+    Conflict:
+      description: Конфликт текущего состояния
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiError"
+    Error:
+      description: Ошибка выполнения запроса
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/ApiError"
+
+  schemas:
+    JsonObject:
+      type: object
+      additionalProperties: true
+      description: Предварительная схема; будет заменена после утверждения ERD.
+
+    ApiError:
+      type: object
+      required: [status, code, message]
+      properties:
+        status: { type: integer, example: 409 }
+        code: { type: string, example: ACTIVE_SHIFT_ALREADY_EXISTS }
+        message: { type: string, example: В ресторане уже есть активная смена }
+        path: { type: string, example: /api/v1/restaurants/.../shifts/.../start }
+        timestamp: { type: string, format: date-time }
+        fieldErrors:
+          type: object
+          additionalProperties:
+            type: string
+
+    RegisterManagerRequest:
+      type: object
+      required: [firstName, lastName, email, password]
+      properties:
+        firstName: { type: string, minLength: 1, maxLength: 100 }
+        lastName: { type: string, minLength: 1, maxLength: 100 }
+        email: { type: string, format: email }
+        password: { type: string, format: password, minLength: 8 }
+
+    LoginRequest:
+      type: object
+      required: [login, password, profileType]
+      properties:
+        login: { type: string }
+        password: { type: string, format: password }
+        profileType:
+          $ref: "#/components/schemas/ProfileType"
+
+    RefreshTokenRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken: { type: string }
+
+    TokenPair:
+      type: object
+      required: [accessToken, refreshToken, expiresIn]
+      properties:
+        accessToken: { type: string }
+        refreshToken: { type: string }
+        tokenType: { type: string, const: Bearer }
+        expiresIn: { type: integer, description: Срок access-токена в секундах }
+        restaurants:
+          type: array
+          description: Рестораны, доступные в выбранном режиме входа.
+          items:
+            $ref: "#/components/schemas/RestaurantMembershipSummary"
+
+    ResetPasswordRequest:
+      type: object
+      required: [token, newPassword]
+      properties:
+        token: { type: string }
+        newPassword: { type: string, format: password, minLength: 8 }
+
+    ChangePasswordRequest:
+      type: object
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword: { type: string, format: password }
+        newPassword: { type: string, format: password, minLength: 8 }
+
+    EmployeePosition:
+      type: string
+      enum: [MANAGER, WAITER, RUNNER]
+
+    ProfileType:
+      type: string
+      enum: [MANAGER, EMPLOYEE]
+
+    RestaurantMembershipSummary:
+      type: object
+      required: [restaurantId, restaurantName, position, status]
+      properties:
+        restaurantId: { type: string, format: uuid }
+        restaurantName: { type: string }
+        position:
+          $ref: "#/components/schemas/EmployeePosition"
+        status:
+          $ref: "#/components/schemas/EmployeeStatus"
+
+    EmployeeStatus:
+      type: string
+      enum: [INVITED, ACTIVE, INACTIVE, BLOCKED, ARCHIVED]
+      description: Статус профиля пользователя в конкретном ресторане.
+
+    InvitationStatus:
+      type: string
+      enum: [PENDING, ACCEPTED, EXPIRED, REVOKED]
+
+    CreateInvitationRequest:
+      type: object
+      required: [firstName, lastName, position]
+      properties:
+        firstName:
+          type: string
+          minLength: 1
+          maxLength: 100
+          example: Анна
+        lastName:
+          type: string
+          minLength: 1
+          maxLength: 100
+          example: Соколова
+        position:
+          $ref: "#/components/schemas/EmployeePosition"
+
+    InvitationResponse:
+      type: object
+      required: [id, employeeId, firstName, lastName, position, status, invitationUrl, expiresAt]
+      properties:
+        id: { type: string, format: uuid }
+        employeeId: { type: string, format: uuid }
+        firstName: { type: string, example: Анна }
+        lastName: { type: string, example: Соколова }
+        position:
+          $ref: "#/components/schemas/EmployeePosition"
+        status:
+          $ref: "#/components/schemas/InvitationStatus"
+        invitationUrl: { type: string, format: uri }
+        qrContent:
+          type: string
+          description: Содержимое QR-кода; совпадает с безопасной ссылкой.
+        expiresAt: { type: string, format: date-time }
+
+    PublicInvitationResponse:
+      type: object
+      required: [restaurantName, firstName, lastName, position, expiresAt]
+      properties:
+        restaurantName: { type: string }
+        firstName: { type: string }
+        lastName: { type: string }
+        position:
+          $ref: "#/components/schemas/EmployeePosition"
+        expiresAt: { type: string, format: date-time }
+
+    AcceptInvitationRequest:
+      type: object
+      required: [login, password]
+      properties:
+        login:
+          type: string
+          minLength: 3
+          maxLength: 100
+          example: anna.sokolova
+          description: Устанавливается один раз и после активации аккаунта не изменяется.
+        password:
+          type: string
+          format: password
+          minLength: 8
+          description: Создаёт пароль для нового аккаунта или подтверждает существующий аккаунт.
+
+    UpdateEmployeeRequest:
+      type: object
+      minProperties: 1
+      properties:
+        firstName: { type: string, minLength: 1, maxLength: 100 }
+        lastName: { type: string, minLength: 1, maxLength: 100 }
+        position:
+          $ref: "#/components/schemas/EmployeePosition"
+
+    TableStatus:
+      type: string
+      enum: [NEEDS_CLEANING, NEEDS_SERVING, READY, PROBLEM]
+
+    ChangeTableStatusRequest:
+      type: object
+      required: [status]
+      properties:
+        status:
+          $ref: "#/components/schemas/TableStatus"
+        comment:
+          type: string
+          minLength: 1
+          maxLength: 1000
+          description: Обязателен для статуса PROBLEM.
+      allOf:
+        - if:
+            properties:
+              status:
+                const: PROBLEM
+            required: [status]
+          then:
+            required: [comment]
+
+    TaskStatus:
+      type: string
+      enum: [CREATED, IN_PROGRESS, COMPLETED, CANCELLED]
+      description: |
+        Сотрудник: CREATED → IN_PROGRESS → COMPLETED.
+        Менеджер: CREATED или IN_PROGRESS → COMPLETED или CANCELLED.
+
+    ChangeTaskStatusRequest:
+      type: object
+      required: [status]
+      properties:
+        status:
+          $ref: "#/components/schemas/TaskStatus"
+        comment: { type: string, maxLength: 1000 }
+
+    ShiftStatus:
+      type: string
+      enum: [PLANNED, ACTIVE, CLOSED, CANCELLED]
+
+    UnfinishedTaskAction:
+      type: string
+      enum: [CARRY_OVER, CANCEL]
+
+    CloseShiftRequest:
+      type: object
+      required: [unfinishedTasks]
+      properties:
+        unfinishedTasks:
+          type: array
+          description: Решение менеджера по каждой незавершённой задаче закрываемой смены.
+          items:
+            type: object
+            required: [taskId, action]
+            properties:
+              taskId:
+                type: string
+                format: uuid
+              action:
+                $ref: "#/components/schemas/UnfinishedTaskAction"
+              comment:
+                type: string
+                maxLength: 1000
+
+x-websocket:
+  url: /api/v1/ws
+  status: draft
+  events:
+    - TABLE_STATUS_CHANGED
+    - TASK_CREATED
+    - TASK_ASSIGNED
+    - TASK_UPDATED
+    - SHIFT_PARTICIPANT_JOINED
+    - SHIFT_PARTICIPANT_LEFT
+    - SHIFT_CLOSED
+    - NOTIFICATION_CREATED
