@@ -1,10 +1,16 @@
 openapi: 3.1.0
 
 info:
-  title: REST Restaurant API
-  version: 0.1.0
+  title: REST Restaurant Public Gateway API
+  version: 0.2.0
   description: |
-    Черновой API-контракт приложения REST.
+    Публичный контракт мобильных приложений iOS и Android.
+    Клиенты подключаются только к API Gateway; внутренние адреса микросервисов не являются
+    частью публичного API. Владельцы маршрутов зафиксированы в
+    `backend/contracts/gateway/routes.yaml`.
+
+x-architecture: microservices
+x-entrypoint: api-gateway
 
 servers:
   - url: /api/v1
@@ -15,21 +21,37 @@ security:
 
 tags:
   - name: Auth
+    x-owner-service: identity-service
   - name: Profile
+    x-owner-service: api-gateway
   - name: Restaurants
+    x-owner-service: restaurant-service
   - name: Employees
+    x-owner-service: workforce-service
   - name: Invitations
+    x-owner-service: workforce-service
   - name: Halls
+    x-owner-service: restaurant-service
   - name: Tables
+    x-owner-service: restaurant-service
   - name: Shifts
+    x-owner-service: operations-service
   - name: Attendance
+    x-owner-service: operations-service
   - name: Tasks
+    x-owner-service: operations-service
   - name: Task templates
+    x-owner-service: operations-service
   - name: Notifications
+    x-owner-service: notification-service
   - name: Statistics
+    x-owner-service: reporting-service
   - name: Audit
+    x-owner-service: audit-service
   - name: Subscription
+    x-owner-service: billing-service
   - name: Platform
+    x-owner-service: api-gateway
 
 paths:
   /auth/register-manager:

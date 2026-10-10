@@ -1,0 +1,74 @@
+version: 1
+basePath: /api/v1
+
+# Порядок важен: более конкретные маршруты должны проверяться раньше общих.
+routes:
+  - id: identity-auth
+    owner: identity-service
+    pathRegex: ^/api/v1/auth(?:/.*)?$
+
+  - id: notification-self
+    owner: notification-service
+    pathRegex: ^/api/v1/me/(?:notifications|devices)(?:/.*)?$
+
+  - id: workforce-self-restaurants
+    owner: workforce-service
+    pathRegex: ^/api/v1/me/restaurants$
+
+  - id: operations-self-shift
+    owner: operations-service
+    pathRegex: ^/api/v1/me/current-shift$
+
+  - id: identity-profile
+    owner: identity-service
+    pathRegex: ^/api/v1/me(?:/avatar|/permissions)?$
+    composition:
+      /api/v1/me/permissions: workforce-service
+
+  - id: workforce-invitations-public
+    owner: workforce-service
+    pathRegex: ^/api/v1/invitations/[^/]+(?:/accept)?$
+
+  - id: reporting
+    owner: reporting-service
+    pathRegex: ^/api/v1/restaurants/[^/]+/(?:statistics(?:/.*)?|employees/[^/]+/statistics)$
+
+  - id: audit
+    owner: audit-service
+    pathRegex: ^/api/v1/(?:restaurants/[^/]+/audit-log|platform/(?:audit-log|system-events))$
+
+  - id: billing
+    owner: billing-service
+    pathRegex: ^/api/v1/(?:restaurants/[^/]+/subscription(?:/.*)?|platform/subscriptions)$
+
+  - id: operations
+    owner: operations-service
+    pathRegex: ^/api/v1/restaurants/[^/]+/(?:shifts|tasks|task-templates)(?:/.*)?$
+
+  - id: workforce
+    owner: workforce-service
+    pathRegex: ^/api/v1/restaurants/[^/]+/(?:employees(?:/[^/]+(?:/(?:status|shifts))?)?|invitations(?:/.*)?)$
+
+  - id: restaurant-resources
+    owner: restaurant-service
+    pathRegex: ^/api/v1/restaurants(?:/[^/]+(?:/(?:logo|halls|tables)(?:/.*)?)?)?$
+
+  - id: platform-restaurants
+    owner: restaurant-service
+    pathRegex: ^/api/v1/platform/restaurants(?:/.*)?$
+
+  - id: platform-users
+    owner: identity-service
+    pathRegex: ^/api/v1/platform/users(?:/.*)?$
+
+websocket:
+  path: /api/v1/ws
+  owner: api-gateway
+  source: RabbitMQ domain events
+
+rules:
+  publicEntryPointOnly: true
+  forwardAuthorization: true
+  propagateHeaders: [X-Request-Id, traceparent]
+  defaultTimeoutMs: 3000
+  retryUnsafeMethods: false

@@ -1,10 +1,35 @@
 # REST Restaurant API
 
-- Версия контракта: `0.1.0`
+- Версия контракта: `0.2.0`
 - Базовый путь: `/api/v1`
 - Основной формат: JSON
 - Формальная спецификация: [`api/openapi.yaml`](api/openapi.yaml)
-- Статус: черновик
+- Статус: публичный контракт Gateway, черновик реализации
+
+## API в микросервисной архитектуре
+
+Мобильные приложения обращаются только к API Gateway. Публичные пути `/api/v1` сохраняются при
+разделении бэкенда: iOS и Android не должны знать адреса внутренних сервисов. Точный владелец
+каждой группы путей задан в [`../contracts/gateway/routes.yaml`](../contracts/gateway/routes.yaml).
+
+| Публичная область | Владелец |
+|---|---|
+| `/auth/**`, профиль и сессии | `identity-service` |
+| рестораны, залы и столы | `restaurant-service` |
+| сотрудники, приглашения и permissions | `workforce-service` |
+| смены, посещаемость, задачи и шаблоны | `operations-service` |
+| подписки | `billing-service` |
+| уведомления и push-устройства | `notification-service` |
+| аудит | `audit-service` |
+| статистика | `reporting-service` |
+| `/platform/users/**` | `identity-service` |
+| `/platform/restaurants/**` | `restaurant-service` |
+| составные read-only `/me/**` | композиция в Gateway |
+
+Все изменяющие состояние запросы должны поддерживать `Idempotency-Key`; Gateway прокидывает
+`X-Request-Id` и W3C `traceparent`. Повторять автоматически разрешено только безопасные запросы.
+Событийный контракт сервисов описан в
+[`../contracts/events/asyncapi.yaml`](../contracts/events/asyncapi.yaml).
 
 ## Условные обозначения доступа
 
