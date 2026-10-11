@@ -1,0 +1,277 @@
+asyncapi: 2.6.0
+info:
+  title: REST Restaurant Domain Events
+  version: 1.0.0
+  description: |
+    Версионированные события между микросервисами. Событие публикуется в RabbitMQ только через
+    transactional outbox сервиса-владельца. Получатели используют inbox_messages для идемпотентности.
+
+defaultContentType: application/json
+
+servers:
+  local:
+    url: rabbitmq:5672
+    protocol: amqp
+    description: Локальный RabbitMQ
+
+channels:
+  identity.user.created.v1:
+    publish:
+      message:
+        $ref: '#/components/messages/UserCreated'
+  identity.user.status-changed.v1:
+    publish:
+      message:
+        $ref: '#/components/messages/UserStatusChanged'
+  restaurant.restaurant.created.v1:
+    publish:
+      message:
+        $ref: '#/components/messages/RestaurantCreated'
+  restaurant.restaurant.status-changed.v1:
+    publish:
+      message:
+        $ref: '#/components/messages/RestaurantStatusChanged'
+  restaurant.table.status-changed.v1:
+    publish:
+      message:
+        $ref: '#/components/messages/TableStatusChanged'
+  workforce.membership.created.v1:
+    publish:
+      message:
+        $ref: '#/components/messages/MembershipCreated'
+  workforce.membership.status-changed.v1:
+    publish:
+      message:
+        $ref: '#/components/messages/MembershipStatusChanged'
+  workforce.invitation.accepted.v1:
+    publish:
+      message:
+        $ref: '#/components/messages/InvitationAccepted'
+  operations.shift.started.v1:
+    publish:
+      message:
+        $ref: '#/components/messages/ShiftStarted'
+  operations.shift.closed.v1:
+    publish:
+      message:
+        $ref: '#/components/messages/ShiftClosed'
+  operations.task.created.v1:
+    publish:
+      message:
+        $ref: '#/components/messages/TaskCreated'
+  operations.task.status-changed.v1:
+    publish:
+      message:
+        $ref: '#/components/messages/TaskStatusChanged'
+  billing.subscription.status-changed.v1:
+    publish:
+      message:
+        $ref: '#/components/messages/SubscriptionStatusChanged'
+  notification.created.v1:
+    publish:
+      message:
+        $ref: '#/components/messages/NotificationCreated'
+
+components:
+  messages:
+    UserCreated:
+      name: identity.user.created.v1
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/EventEnvelope'
+          - type: object
+            properties:
+              payload:
+                $ref: '#/components/schemas/UserPayload'
+    UserStatusChanged:
+      name: identity.user.status-changed.v1
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/EventEnvelope'
+          - type: object
+            properties:
+              payload:
+                $ref: '#/components/schemas/UserPayload'
+    RestaurantCreated:
+      name: restaurant.restaurant.created.v1
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/EventEnvelope'
+          - type: object
+            properties:
+              payload:
+                $ref: '#/components/schemas/RestaurantPayload'
+    RestaurantStatusChanged:
+      name: restaurant.restaurant.status-changed.v1
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/EventEnvelope'
+          - type: object
+            properties:
+              payload:
+                $ref: '#/components/schemas/RestaurantPayload'
+    TableStatusChanged:
+      name: restaurant.table.status-changed.v1
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/EventEnvelope'
+          - type: object
+            properties:
+              payload:
+                $ref: '#/components/schemas/TableStatusPayload'
+    MembershipCreated:
+      name: workforce.membership.created.v1
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/EventEnvelope'
+          - type: object
+            properties:
+              payload:
+                $ref: '#/components/schemas/MembershipPayload'
+    MembershipStatusChanged:
+      name: workforce.membership.status-changed.v1
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/EventEnvelope'
+          - type: object
+            properties:
+              payload:
+                $ref: '#/components/schemas/MembershipPayload'
+    InvitationAccepted:
+      name: workforce.invitation.accepted.v1
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/EventEnvelope'
+          - type: object
+            properties:
+              payload:
+                $ref: '#/components/schemas/MembershipPayload'
+    ShiftStarted:
+      name: operations.shift.started.v1
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/EventEnvelope'
+          - type: object
+            properties:
+              payload:
+                $ref: '#/components/schemas/ShiftPayload'
+    ShiftClosed:
+      name: operations.shift.closed.v1
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/EventEnvelope'
+          - type: object
+            properties:
+              payload:
+                $ref: '#/components/schemas/ShiftPayload'
+    TaskCreated:
+      name: operations.task.created.v1
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/EventEnvelope'
+          - type: object
+            properties:
+              payload:
+                $ref: '#/components/schemas/TaskPayload'
+    TaskStatusChanged:
+      name: operations.task.status-changed.v1
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/EventEnvelope'
+          - type: object
+            properties:
+              payload:
+                $ref: '#/components/schemas/TaskPayload'
+    SubscriptionStatusChanged:
+      name: billing.subscription.status-changed.v1
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/EventEnvelope'
+          - type: object
+            properties:
+              payload:
+                $ref: '#/components/schemas/SubscriptionPayload'
+    NotificationCreated:
+      name: notification.created.v1
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/EventEnvelope'
+          - type: object
+            properties:
+              payload:
+                $ref: '#/components/schemas/NotificationPayload'
+
+  schemas:
+    EventEnvelope:
+      type: object
+      required: [eventId, eventType, eventVersion, occurredAt, producer, correlationId, payload]
+      properties:
+        eventId: { type: string, format: uuid }
+        eventType: { type: string }
+        eventVersion: { type: integer, minimum: 1 }
+        occurredAt: { type: string, format: date-time }
+        producer: { type: string }
+        correlationId: { type: string, format: uuid }
+        actorUserId: { type: string, format: uuid }
+        restaurantId: { type: string, format: uuid }
+        payload: { type: object }
+    UserPayload:
+      type: object
+      required: [userId, status]
+      properties:
+        userId: { type: string, format: uuid }
+        status: { type: string, enum: [ACTIVE, BLOCKED, ARCHIVED] }
+    RestaurantPayload:
+      type: object
+      required: [restaurantId, directorUserId, status]
+      properties:
+        restaurantId: { type: string, format: uuid }
+        directorUserId: { type: string, format: uuid }
+        status: { type: string, enum: [ACTIVE, BLOCKED, ARCHIVED] }
+    MembershipPayload:
+      type: object
+      required: [membershipId, restaurantId, role, status]
+      properties:
+        membershipId: { type: string, format: uuid }
+        restaurantId: { type: string, format: uuid }
+        userId: { type: string, format: uuid }
+        role: { type: string, enum: [EMPLOYEE, MANAGER, DIRECTOR] }
+        status: { type: string, enum: [INVITED, ACTIVE, INACTIVE, BLOCKED, ARCHIVED] }
+    TableStatusPayload:
+      type: object
+      required: [tableId, restaurantId, status]
+      properties:
+        tableId: { type: string, format: uuid }
+        restaurantId: { type: string, format: uuid }
+        changedByMembershipId: { type: string, format: uuid }
+        status: { type: string, enum: [READY, NEEDS_CLEANING, NEEDS_SERVING, PROBLEM] }
+    ShiftPayload:
+      type: object
+      required: [shiftId, restaurantId, status]
+      properties:
+        shiftId: { type: string, format: uuid }
+        restaurantId: { type: string, format: uuid }
+        status: { type: string, enum: [PLANNED, ACTIVE, CLOSED, CANCELLED] }
+    TaskPayload:
+      type: object
+      required: [taskId, restaurantId, status]
+      properties:
+        taskId: { type: string, format: uuid }
+        restaurantId: { type: string, format: uuid }
+        assignedToMembershipId: { type: string, format: uuid }
+        status: { type: string, enum: [CREATED, IN_PROGRESS, COMPLETED, CANCELLED] }
+    SubscriptionPayload:
+      type: object
+      required: [subscriptionId, restaurantId, status]
+      properties:
+        subscriptionId: { type: string, format: uuid }
+        restaurantId: { type: string, format: uuid }
+        status: { type: string, enum: [ACTIVE, EXPIRED, CANCELLED] }
+    NotificationPayload:
+      type: object
+      required: [notificationId, userId, type]
+      properties:
+        notificationId: { type: string, format: uuid }
+        userId: { type: string, format: uuid }
+        restaurantId: { type: string, format: uuid }
+        type: { type: string }
