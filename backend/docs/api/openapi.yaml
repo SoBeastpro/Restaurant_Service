@@ -24,6 +24,8 @@ tags:
     x-owner-service: identity-service
   - name: Profile
     x-owner-service: api-gateway
+  - name: Onboarding
+    x-owner-service: identity-service
   - name: Restaurants
     x-owner-service: restaurant-service
   - name: Employees
@@ -54,18 +56,21 @@ tags:
     x-owner-service: api-gateway
 
 paths:
-  /auth/register-manager:
+  /auth/register:
     post:
       tags: [Auth]
-      summary: Зарегистрировать менеджера
-      operationId: registerManager
+      summary: Зарегистрировать пользователя
+      description: |
+        Публичная регистрация доступна только директору ресторана. Сервер автоматически
+        назначает роль DIRECTOR. MANAGER и EMPLOYEE регистрируются только по QR-приглашению.
+      operationId: register
       security: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/RegisterManagerRequest"
+              $ref: "#/components/schemas/RegisterRequest"
       responses:
         "201":
           $ref: "#/components/responses/Created"
@@ -130,32 +135,6 @@ paths:
       tags: [Auth]
       summary: Завершить все сессии пользователя
       operationId: logoutAll
-      responses:
-        "204":
-          $ref: "#/components/responses/NoContent"
-
-  /auth/email/verify:
-    post:
-      tags: [Auth]
-      summary: Подтвердить email
-      operationId: verifyEmail
-      security: []
-      requestBody:
-        $ref: "#/components/requestBodies/TokenRequest"
-      responses:
-        "204":
-          $ref: "#/components/responses/NoContent"
-        default:
-          $ref: "#/components/responses/Error"
-
-  /auth/email/resend:
-    post:
-      tags: [Auth]
-      summary: Повторно отправить подтверждение email
-      operationId: resendEmailVerification
-      security: []
-      requestBody:
-        $ref: "#/components/requestBodies/LoginValueRequest"
       responses:
         "204":
           $ref: "#/components/responses/NoContent"
@@ -301,7 +280,11 @@ paths:
       operationId: getMyCurrentShift
       responses:
         "200":
-          $ref: "#/components/responses/Ok"
+          description: Открытая смена, столы и личный план текущего сотрудника
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CurrentShiftResponse"
 
   /me/notifications:
     get:
@@ -313,7 +296,13 @@ paths:
         - $ref: "#/components/parameters/Size"
       responses:
         "200":
-          $ref: "#/components/responses/Ok"
+          description: Уведомления текущего пользователя от новых к старым
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/NotificationResponse"
 
   /me/notifications/{notificationId}/read:
     parameters:
@@ -324,7 +313,11 @@ paths:
       operationId: readNotification
       responses:
         "200":
-          $ref: "#/components/responses/Ok"
+          description: Уведомление отмечено прочитанным
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationResponse"
 
   /me/notifications/read-all:
     post:
@@ -357,16 +350,61 @@ paths:
         "204":
           $ref: "#/components/responses/NoContent"
 
+  /onboarding/subscription:
+    get:
+      tags: [Onboarding]
+      summary: Получить состояние локальной заглушки подписки
+      description: Доступно директору до создания ресторана. Платёжная система не вызывается.
+      operationId: getOnboardingSubscription
+      x-access: Director
+      responses:
+        "200":
+          description: Состояние заглушки подписки
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnboardingSubscription"
+        default:
+          $ref: "#/components/responses/Error"
+
+  /onboarding/subscription/activate:
+    post:
+      tags: [Onboarding]
+      summary: Активировать локальную заглушку подписки на 30 дней
+      description: Повторный запрос при активной подписке не изменяет дату окончания.
+      operationId: activateOnboardingSubscriptionStub
+      x-access: Director
+      responses:
+        "200":
+          description: Заглушка подписки активирована
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnboardingSubscription"
+        default:
+          $ref: "#/components/responses/Error"
+
   /restaurants:
     post:
       tags: [Restaurants]
-      summary: Создать ресторан
+      summary: Создать ресторан с недельным графиком
       operationId: createRestaurant
+      x-access: Director
       requestBody:
-        $ref: "#/components/requestBodies/JsonBody"
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateRestaurantRequest"
       responses:
         "201":
-          $ref: "#/components/responses/Created"
+          description: Ресторан создан и связан с директором
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RestaurantResponse"
+        default:
+          $ref: "#/components/responses/Error"
 
   /restaurants/{restaurantId}:
     parameters:
@@ -375,9 +413,14 @@ paths:
       tags: [Restaurants]
       summary: Получить профиль ресторана
       operationId: getRestaurant
+      x-access: Director or Manager
       responses:
         "200":
-          $ref: "#/components/responses/Ok"
+          description: Ресторан с недельным графиком
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RestaurantResponse"
     patch:
       tags: [Restaurants]
       summary: Изменить профиль ресторана
@@ -426,10 +469,16 @@ paths:
       tags: [Employees]
       summary: Получить сотрудников ресторана
       operationId: listEmployees
-      x-access: Manager
+      x-access: Director or Manager
       responses:
         "200":
-          $ref: "#/components/responses/Ok"
+          description: Активные сотрудники ресторана
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EmployeeResponse"
 
   /restaurants/{restaurantId}/employees/{employeeId}:
     parameters:
@@ -442,7 +491,13 @@ paths:
       x-access: Manager
       responses:
         "200":
-          $ref: "#/components/responses/Ok"
+          description: Список смен с сохранёнными итоговыми метриками закрытых смен
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ShiftSummaryResponse"
     patch:
       tags: [Employees]
       summary: Изменить имя, фамилию или должность сотрудника
@@ -456,7 +511,11 @@ paths:
               $ref: "#/components/schemas/UpdateEmployeeRequest"
       responses:
         "200":
-          $ref: "#/components/responses/Ok"
+          description: Смена завершена, итоговый отчёт сохранён
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShiftReportResponse"
     delete:
       tags: [Employees]
       summary: Архивировать сотрудника
@@ -487,7 +546,11 @@ paths:
                   $ref: "#/components/schemas/EmployeeStatus"
       responses:
         "200":
-          $ref: "#/components/responses/Ok"
+          description: Сохранённый итог смены
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShiftReportResponse"
 
   /restaurants/{restaurantId}/employees/{employeeId}/shifts:
     parameters:
@@ -522,7 +585,8 @@ paths:
       tags: [Invitations]
       summary: Получить приглашения ресторана
       operationId: listInvitations
-      x-access: Manager
+      description: Директор видит все приглашения; менеджер — приглашения сотрудников.
+      x-access: Director or Manager
       responses:
         "200":
           $ref: "#/components/responses/Ok"
@@ -530,7 +594,8 @@ paths:
       tags: [Invitations]
       summary: Создать сотрудника и приглашение
       operationId: createInvitation
-      x-access: Manager
+      description: Менеджер может создавать приглашения только с ролью EMPLOYEE.
+      x-access: Director or Manager
       requestBody:
         required: true
         content:
@@ -555,7 +620,8 @@ paths:
       tags: [Invitations]
       summary: Отозвать приглашение
       operationId: revokeInvitation
-      x-access: Manager
+      description: Менеджер может отзывать приглашения сотрудников, включая созданные директором.
+      x-access: Director or Manager
       responses:
         "204":
           $ref: "#/components/responses/NoContent"
@@ -566,9 +632,10 @@ paths:
       - $ref: "#/components/parameters/InvitationId"
     post:
       tags: [Invitations]
-      summary: Перевыпустить или повторно отправить приглашение
+      summary: Перевыпустить приглашение
       operationId: resendInvitation
-      x-access: Manager
+      description: Менеджер может перевыпускать приглашения сотрудников, включая созданные директором.
+      x-access: Director or Manager
       responses:
         "200":
           description: Приглашение обновлено
@@ -626,19 +693,34 @@ paths:
       tags: [Halls]
       summary: Получить залы ресторана
       operationId: listHalls
+      x-access: Director or Manager
       responses:
         "200":
-          $ref: "#/components/responses/Ok"
+          description: Залы ресторана
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/HallResponse"
     post:
       tags: [Halls]
       summary: Создать зал
       operationId: createHall
-      x-access: Manager
+      x-access: Director or Manager
       requestBody:
-        $ref: "#/components/requestBodies/JsonBody"
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateHallRequest"
       responses:
         "201":
-          $ref: "#/components/responses/Created"
+          description: Зал создан
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HallResponse"
 
   /restaurants/{restaurantId}/halls/{hallId}:
     parameters:
@@ -648,9 +730,14 @@ paths:
       tags: [Halls]
       summary: Получить зал и его план
       operationId: getHall
+      x-access: Director or Manager
       responses:
         "200":
-          $ref: "#/components/responses/Ok"
+          description: Зал
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HallResponse"
     patch:
       tags: [Halls]
       summary: Изменить зал
@@ -678,12 +765,20 @@ paths:
       tags: [Tables]
       summary: Добавить стол в зал
       operationId: createTable
-      x-access: Manager
+      x-access: Director or Manager
       requestBody:
-        $ref: "#/components/requestBodies/JsonBody"
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTableRequest"
       responses:
         "201":
-          $ref: "#/components/responses/Created"
+          description: Стол создан
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TableResponse"
 
   /restaurants/{restaurantId}/tables:
     parameters:
@@ -692,9 +787,16 @@ paths:
       tags: [Tables]
       summary: Получить столы ресторана
       operationId: listTables
+      x-access: Director or Manager
       responses:
         "200":
-          $ref: "#/components/responses/Ok"
+          description: Столы ресторана
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TableResponse"
 
   /restaurants/{restaurantId}/tables/{tableId}:
     parameters:
@@ -704,19 +806,32 @@ paths:
       tags: [Tables]
       summary: Получить стол
       operationId: getTable
+      x-access: Director or Manager
       responses:
         "200":
-          $ref: "#/components/responses/Ok"
+          description: Стол
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TableResponse"
     patch:
       tags: [Tables]
       summary: Изменить стол
       operationId: updateTable
-      x-access: Manager
+      x-access: Director or Manager
       requestBody:
-        $ref: "#/components/requestBodies/JsonBody"
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateTableRequest"
       responses:
         "200":
-          $ref: "#/components/responses/Ok"
+          description: Стол обновлён
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TableResponse"
     delete:
       tags: [Tables]
       summary: Архивировать стол
@@ -734,7 +849,11 @@ paths:
       tags: [Tables]
       summary: Изменить состояние стола
       operationId: changeTableStatus
-      x-access: TBD
+      description: |
+        Закреплённый официант устанавливает NEEDS_CLEANING, NEEDS_SERVING или PROBLEM;
+        закреплённый раннер возвращает стол в READY. Директор и менеджер могут установить
+        любой статус. Переходы между статусами не ограничены.
+      x-access: Assigned waiter, assigned runner, Director or Manager
       requestBody:
         required: true
         content:
@@ -742,8 +861,48 @@ paths:
             schema:
               $ref: "#/components/schemas/ChangeTableStatusRequest"
       responses:
-        "201":
-          $ref: "#/components/responses/Created"
+        "200":
+          description: Статус изменён, история и уведомления созданы
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TableStatusResponse"
+
+  /restaurants/{restaurantId}/tables/status-history:
+    parameters:
+      - $ref: "#/components/parameters/RestaurantId"
+    get:
+      tags: [Tables]
+      summary: Получить журнал статусов столов ресторана
+      operationId: getRestaurantTableStatusHistory
+      x-access: Director or Manager
+      parameters:
+        - name: tableId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: shiftId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: changedByMembershipId
+          in: query
+          schema: { type: string, format: uuid }
+          description: Фронтенд выбирает сотрудника по имени и передаёт его membershipId.
+        - name: from
+          in: query
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          schema: { type: string, format: date-time }
+          description: Исключительная верхняя граница периода.
+      responses:
+        "200":
+          description: Отфильтрованный журнал статусов
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TableStatusHistoryResponse"
 
   /restaurants/{restaurantId}/tables/{tableId}/status-history:
     parameters:
@@ -753,10 +912,21 @@ paths:
       tags: [Tables]
       summary: Получить историю состояний стола
       operationId: getTableStatusHistory
-      x-access: Manager
+      x-access: Director or Manager
+      parameters:
+        - name: shiftId
+          in: query
+          schema: { type: string, format: uuid }
+          description: Ограничить историю одной сменой.
       responses:
         "200":
-          $ref: "#/components/responses/Ok"
+          description: История статусов стола от новых записей к старым
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TableStatusHistoryResponse"
 
   /restaurants/{restaurantId}/shifts:
     parameters:
@@ -771,14 +941,22 @@ paths:
           $ref: "#/components/responses/Ok"
     post:
       tags: [Shifts]
-      summary: Запланировать смену
+      summary: Создать черновик смены
       operationId: createShift
-      x-access: Manager
+      x-access: Director or Manager
       requestBody:
-        $ref: "#/components/requestBodies/JsonBody"
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateShiftRequest"
       responses:
         "201":
-          $ref: "#/components/responses/Created"
+          description: Черновик смены создан
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShiftResponse"
 
   /restaurants/{restaurantId}/shifts/current:
     parameters:
@@ -799,9 +977,14 @@ paths:
       tags: [Shifts]
       summary: Получить смену
       operationId: getShift
+      x-access: Director or Manager
       responses:
         "200":
-          $ref: "#/components/responses/Ok"
+          description: Смена с участниками, столами и задачами
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShiftResponse"
     patch:
       tags: [Shifts]
       summary: Изменить запланированную смену
@@ -821,10 +1004,14 @@ paths:
       tags: [Shifts]
       summary: Начать смену
       operationId: startShift
-      x-access: Manager
+      x-access: Director or Manager
       responses:
         "200":
-          $ref: "#/components/responses/Ok"
+          description: Смена открыта
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShiftResponse"
         "409":
           $ref: "#/components/responses/Conflict"
 
@@ -864,23 +1051,53 @@ paths:
     parameters:
       - $ref: "#/components/parameters/RestaurantId"
       - $ref: "#/components/parameters/ShiftId"
-    get:
-      tags: [Attendance]
-      summary: Получить участников смены
-      operationId: listShiftParticipants
+    put:
+      tags: [Shifts]
+      summary: Заменить состав сотрудников и закрепление столов в черновике
+      operationId: configureShiftParticipants
+      x-access: Director or Manager
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConfigureShiftRequest"
       responses:
         "200":
-          $ref: "#/components/responses/Ok"
+          description: Конфигурация черновика сохранена
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShiftResponse"
+        "409":
+          description: Один стол указан у нескольких сотрудников
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+
+  /restaurants/{restaurantId}/shifts/{shiftId}/tasks:
+    parameters:
+      - $ref: "#/components/parameters/RestaurantId"
+      - $ref: "#/components/parameters/ShiftId"
     post:
-      tags: [Attendance]
-      summary: Добавить сотрудника в смену
-      operationId: addShiftParticipant
-      x-access: Manager
+      tags: [Tasks]
+      summary: Добавить персональную задачу в план смены
+      operationId: createShiftTask
+      x-access: Director or Manager
       requestBody:
-        $ref: "#/components/requestBodies/JsonBody"
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateShiftTaskRequest"
       responses:
         "201":
-          $ref: "#/components/responses/Created"
+          description: Задача создана
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskResponse"
 
   /restaurants/{restaurantId}/shifts/{shiftId}/participants/{employeeId}/check-in:
     parameters:
@@ -989,12 +1206,20 @@ paths:
       tags: [Tasks]
       summary: Назначить задачу сотруднику
       operationId: assignTask
-      x-access: Manager
+      x-access: Director or Manager
       requestBody:
-        $ref: "#/components/requestBodies/JsonBody"
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssignTaskRequest"
       responses:
         "200":
-          $ref: "#/components/responses/Ok"
+          description: Новый ответственный назначен
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskResponse"
 
   /restaurants/{restaurantId}/tasks/{taskId}/status-changes:
     parameters:
@@ -1004,7 +1229,7 @@ paths:
       tags: [Tasks]
       summary: Изменить статус задачи
       operationId: changeTaskStatus
-      x-access: TBD
+      x-access: Assigned employee, Director or Manager
       requestBody:
         required: true
         content:
@@ -1012,8 +1237,12 @@ paths:
             schema:
               $ref: "#/components/schemas/ChangeTaskStatusRequest"
       responses:
-        "201":
-          $ref: "#/components/responses/Created"
+        "200":
+          description: Статус изменён; отменённая задача сохранена в истории
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskResponse"
 
   /restaurants/{restaurantId}/tasks/{taskId}/history:
     parameters:
@@ -1023,9 +1252,58 @@ paths:
       tags: [Tasks]
       summary: Получить историю задачи
       operationId: getTaskHistory
+      x-access: Director or Manager
       responses:
         "200":
-          $ref: "#/components/responses/Ok"
+          description: Полная история назначения и статусов задачи
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TaskHistoryResponse"
+
+  /restaurants/{restaurantId}/tasks/pending-carry-over:
+    parameters:
+      - $ref: "#/components/parameters/RestaurantId"
+    get:
+      tags: [Tasks]
+      summary: Получить незавершённые задачи для плана следующей смены
+      operationId: listPendingCarryOverTasks
+      x-access: Director or Manager
+      responses:
+        "200":
+          description: Перенесённые задачи без ответственного
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TaskResponse"
+
+  /restaurants/{restaurantId}/shifts/{shiftId}/tasks/{taskId}/assign-carried:
+    parameters:
+      - $ref: "#/components/parameters/RestaurantId"
+      - $ref: "#/components/parameters/ShiftId"
+      - $ref: "#/components/parameters/TaskId"
+    post:
+      tags: [Tasks]
+      summary: Добавить перенесённую задачу в план новой смены
+      operationId: assignCarriedTask
+      x-access: Director or Manager
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssignCarriedTaskRequest"
+      responses:
+        "200":
+          description: Перенесённая задача назначена участнику новой смены
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskResponse"
 
   /restaurants/{restaurantId}/tasks/{taskId}/carry-over:
     parameters:
@@ -1169,42 +1447,6 @@ paths:
       responses:
         "200":
           $ref: "#/components/responses/Ok"
-
-  /restaurants/{restaurantId}/subscription:
-    parameters:
-      - $ref: "#/components/parameters/RestaurantId"
-    get:
-      tags: [Subscription]
-      summary: Получить состояние подписки
-      operationId: getSubscription
-      x-access: Manager
-      responses:
-        "200":
-          $ref: "#/components/responses/Ok"
-
-  /restaurants/{restaurantId}/subscription/checkout:
-    parameters:
-      - $ref: "#/components/parameters/RestaurantId"
-    post:
-      tags: [Subscription]
-      summary: Начать оформление оплаты
-      operationId: createSubscriptionCheckout
-      x-access: Manager
-      responses:
-        "200":
-          $ref: "#/components/responses/Ok"
-
-  /restaurants/{restaurantId}/subscription/skip:
-    parameters:
-      - $ref: "#/components/parameters/RestaurantId"
-    post:
-      tags: [Subscription]
-      summary: Пропустить оплату в тестовом режиме
-      operationId: skipSubscription
-      x-access: Manager
-      responses:
-        "204":
-          $ref: "#/components/responses/NoContent"
 
   /platform/restaurants:
     get:
@@ -1455,23 +1697,25 @@ components:
           additionalProperties:
             type: string
 
-    RegisterManagerRequest:
+    RegisterRequest:
       type: object
-      required: [firstName, lastName, email, password]
+      required: [login, firstName, lastName, password]
       properties:
+        login:
+          type: string
+          minLength: 3
+          maxLength: 100
+          example: anna.sokolova
         firstName: { type: string, minLength: 1, maxLength: 100 }
         lastName: { type: string, minLength: 1, maxLength: 100 }
-        email: { type: string, format: email }
         password: { type: string, format: password, minLength: 8 }
 
     LoginRequest:
       type: object
-      required: [login, password, profileType]
+      required: [login, password]
       properties:
         login: { type: string }
         password: { type: string, format: password }
-        profileType:
-          $ref: "#/components/schemas/ProfileType"
 
     RefreshTokenRequest:
       type: object
@@ -1493,6 +1737,135 @@ components:
           items:
             $ref: "#/components/schemas/RestaurantMembershipSummary"
 
+    OnboardingSubscription:
+      type: object
+      required: [status, stub]
+      properties:
+        status:
+          type: string
+          enum: [NOT_STARTED, ACTIVE, EXPIRED]
+        expiresAt:
+          type: [string, "null"]
+          format: date-time
+        stub:
+          type: boolean
+          const: true
+          description: Всегда true, пока реальный платёжный провайдер не подключён.
+
+    CreateRestaurantRequest:
+      type: object
+      required: [name, address, openingHours]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 200 }
+        address: { type: string, minLength: 1, maxLength: 500 }
+        openingHours:
+          type: array
+          minItems: 7
+          maxItems: 7
+          description: Каждый день недели должен присутствовать ровно один раз.
+          items:
+            $ref: "#/components/schemas/OpeningHoursRequest"
+
+    OpeningHoursRequest:
+      type: object
+      required: [dayOfWeek, closed]
+      properties:
+        dayOfWeek:
+          type: string
+          enum: [MONDAY, TUESDAY, WEDNESDAY, THURSDAY, FRIDAY, SATURDAY, SUNDAY]
+        closed: { type: boolean }
+        opensAt:
+          type: [string, "null"]
+          format: time
+          example: "18:00"
+        closesAt:
+          type: [string, "null"]
+          format: time
+          example: "02:00"
+
+    OpeningHoursResponse:
+      allOf:
+        - $ref: "#/components/schemas/OpeningHoursRequest"
+        - type: object
+          required: [closesNextDay]
+          properties:
+            closesNextDay:
+              type: boolean
+              description: Закрытие относится к следующим календарным суткам.
+
+    RestaurantResponse:
+      type: object
+      required: [id, name, address, status, openingHours, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        address: { type: string }
+        status: { type: string, enum: [ACTIVE, BLOCKED, ARCHIVED] }
+        openingHours:
+          type: array
+          items:
+            $ref: "#/components/schemas/OpeningHoursResponse"
+        createdAt: { type: string, format: date-time }
+
+    CreateHallRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 100 }
+        displayOrder: { type: integer, minimum: 0, default: 0 }
+
+    HallResponse:
+      type: object
+      required: [id, restaurantId, name, displayOrder, status]
+      properties:
+        id: { type: string, format: uuid }
+        restaurantId: { type: string, format: uuid }
+        name: { type: string }
+        displayOrder: { type: integer }
+        status: { type: string, enum: [ACTIVE, ARCHIVED] }
+
+    TableShape:
+      type: string
+      enum: [ROUND, SQUARE, RECTANGLE]
+
+    CreateTableRequest:
+      type: object
+      required: [number, seatsCount, positionX, positionY, shape]
+      properties:
+        number: { type: string, minLength: 1, maxLength: 20 }
+        seatsCount: { type: integer, minimum: 1, maximum: 100 }
+        positionX: { type: number, minimum: 0 }
+        positionY: { type: number, minimum: 0 }
+        shape:
+          $ref: "#/components/schemas/TableShape"
+
+    UpdateTableRequest:
+      type: object
+      properties:
+        number: { type: string, minLength: 1, maxLength: 20 }
+        seatsCount: { type: integer, minimum: 1, maximum: 100 }
+        positionX: { type: number, minimum: 0 }
+        positionY: { type: number, minimum: 0 }
+        shape:
+          $ref: "#/components/schemas/TableShape"
+
+    TableResponse:
+      type: object
+      required: [id, restaurantId, hallId, number, seatsCount, positionX, positionY, shape, status]
+      properties:
+        id: { type: string, format: uuid }
+        restaurantId: { type: string, format: uuid }
+        hallId: { type: string, format: uuid }
+        number: { type: string }
+        seatsCount: { type: integer }
+        positionX: { type: number }
+        positionY: { type: number }
+        shape:
+          $ref: "#/components/schemas/TableShape"
+        status:
+          type: string
+          enum: [READY, NEEDS_CLEANING, NEEDS_SERVING, PROBLEM]
+
     ResetPasswordRequest:
       type: object
       required: [token, newPassword]
@@ -1509,7 +1882,11 @@ components:
 
     EmployeePosition:
       type: string
-      enum: [MANAGER, WAITER, RUNNER]
+      enum: [WAITER, RUNNER]
+
+    RestaurantRole:
+      type: string
+      enum: [SYSTEM_ADMIN, DIRECTOR, MANAGER, EMPLOYEE]
 
     ProfileType:
       type: string
@@ -1531,13 +1908,26 @@ components:
       enum: [INVITED, ACTIVE, INACTIVE, BLOCKED, ARCHIVED]
       description: Статус профиля пользователя в конкретном ресторане.
 
+    EmployeeResponse:
+      type: object
+      required: [membershipId, userId, firstName, lastName, position, status]
+      properties:
+        membershipId: { type: string, format: uuid }
+        userId: { type: string, format: uuid }
+        firstName: { type: string }
+        lastName: { type: string }
+        position:
+          $ref: "#/components/schemas/EmployeePosition"
+        status:
+          $ref: "#/components/schemas/EmployeeStatus"
+
     InvitationStatus:
       type: string
       enum: [PENDING, ACCEPTED, EXPIRED, REVOKED]
 
     CreateInvitationRequest:
       type: object
-      required: [firstName, lastName, position]
+      required: [firstName, lastName, role]
       properties:
         firstName:
           type: string
@@ -1549,17 +1939,24 @@ components:
           minLength: 1
           maxLength: 100
           example: Соколова
+        role:
+          type: string
+          enum: [MANAGER, EMPLOYEE]
         position:
           $ref: "#/components/schemas/EmployeePosition"
 
     InvitationResponse:
       type: object
-      required: [id, employeeId, firstName, lastName, position, status, invitationUrl, expiresAt]
+      required: [id, employeeId, restaurantId, firstName, lastName, role, status, expiresAt]
       properties:
         id: { type: string, format: uuid }
         employeeId: { type: string, format: uuid }
+        restaurantId: { type: string, format: uuid }
         firstName: { type: string, example: Анна }
         lastName: { type: string, example: Соколова }
+        role:
+          type: string
+          enum: [MANAGER, EMPLOYEE]
         position:
           $ref: "#/components/schemas/EmployeePosition"
         status:
@@ -1572,11 +1969,14 @@ components:
 
     PublicInvitationResponse:
       type: object
-      required: [restaurantName, firstName, lastName, position, expiresAt]
+      required: [restaurantId, firstName, lastName, role, expiresAt]
       properties:
-        restaurantName: { type: string }
+        restaurantId: { type: string, format: uuid }
         firstName: { type: string }
         lastName: { type: string }
+        role:
+          type: string
+          enum: [MANAGER, EMPLOYEE]
         position:
           $ref: "#/components/schemas/EmployeePosition"
         expiresAt: { type: string, format: date-time }
@@ -1630,12 +2030,99 @@ components:
           then:
             required: [comment]
 
+    TableStatusResponse:
+      type: object
+      required: [tableId, tableNumber, shiftId, status, changedByMembershipId, changedAt]
+      properties:
+        tableId: { type: string, format: uuid }
+        tableNumber: { type: string }
+        shiftId: { type: string, format: uuid }
+        status:
+          $ref: "#/components/schemas/TableStatus"
+        comment: { type: [string, "null"] }
+        changedByMembershipId: { type: string, format: uuid }
+        changedAt: { type: string, format: date-time }
+
+    TableStatusHistoryResponse:
+      type: object
+      required:
+        [id, tableId, tableNumber, shiftId, changedByMembershipId, oldStatus, newStatus, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        tableId: { type: string, format: uuid }
+        tableNumber: { type: string }
+        shiftId: { type: string, format: uuid }
+        changedByMembershipId: { type: string, format: uuid }
+        oldStatus:
+          $ref: "#/components/schemas/TableStatus"
+        newStatus:
+          $ref: "#/components/schemas/TableStatus"
+        comment: { type: [string, "null"] }
+        createdAt: { type: string, format: date-time }
+
+    NotificationResponse:
+      type: object
+      required: [id, type, title, message, payload, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        restaurantId: { type: [string, "null"], format: uuid }
+        type:
+          type: string
+          enum: [TABLE_STATUS_CHANGED, TABLE_NEEDS_CLEANING, TABLE_NEEDS_SERVING]
+        title: { type: string }
+        message: { type: string }
+        payload:
+          type: object
+          additionalProperties: true
+        readAt: { type: [string, "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+
     TaskStatus:
       type: string
       enum: [CREATED, IN_PROGRESS, COMPLETED, CANCELLED]
       description: |
         Сотрудник: CREATED → IN_PROGRESS → COMPLETED.
         Менеджер: CREATED или IN_PROGRESS → COMPLETED или CANCELLED.
+
+    TaskDeadlineType:
+      type: string
+      enum: [NONE, TIME, SHIFT_END]
+      description: SHIFT_END означает дедлайн к окончанию выбранной смены.
+
+    CreateShiftTaskRequest:
+      type: object
+      required: [description, assignedToMembershipId, deadlineType]
+      properties:
+        description:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: Название и описание задачи — одно поле в MVP.
+        assignedToMembershipId: { type: string, format: uuid }
+        deadlineType:
+          $ref: "#/components/schemas/TaskDeadlineType"
+        deadlineAt:
+          type: string
+          format: date-time
+          description: Обязательно только при deadlineType=TIME.
+
+    TaskResponse:
+      type: object
+      required:
+        [id, shiftId, description, assignedToMembershipId, status, deadlineType, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        shiftId: { type: [string, "null"], format: uuid }
+        description: { type: string }
+        assignedToMembershipId: { type: [string, "null"], format: uuid }
+        status:
+          $ref: "#/components/schemas/TaskStatus"
+        deadlineType:
+          $ref: "#/components/schemas/TaskDeadlineType"
+        deadlineAt: { type: [string, "null"], format: date-time }
+        completedAt: { type: [string, "null"], format: date-time }
+        cancellationReason: { type: [string, "null"] }
+        createdAt: { type: string, format: date-time }
 
     ChangeTaskStatusRequest:
       type: object
@@ -1645,9 +2132,177 @@ components:
           $ref: "#/components/schemas/TaskStatus"
         comment: { type: string, maxLength: 1000 }
 
+    AssignTaskRequest:
+      type: object
+      required: [assignedToMembershipId]
+      properties:
+        assignedToMembershipId: { type: string, format: uuid }
+
+    AssignCarriedTaskRequest:
+      type: object
+      required: [assignedToMembershipId, deadlineType]
+      properties:
+        assignedToMembershipId: { type: string, format: uuid }
+        deadlineType:
+          $ref: "#/components/schemas/TaskDeadlineType"
+        deadlineAt:
+          type: [string, "null"]
+          format: date-time
+          description: Обязательно только при deadlineType=TIME.
+
+    TaskHistoryResponse:
+      type: object
+      required: [id, eventType, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        eventType:
+          type: string
+          enum: [CREATED, UPDATED, ASSIGNED, STATUS_CHANGED, CARRIED_OVER, CANCELLED, ARCHIVED]
+        actorMembershipId: { type: [string, "null"], format: uuid }
+        oldStatus: { type: [string, "null"] }
+        newStatus: { type: [string, "null"] }
+        oldAssigneeMembershipId: { type: [string, "null"], format: uuid }
+        newAssigneeMembershipId: { type: [string, "null"], format: uuid }
+        comment: { type: [string, "null"] }
+        createdAt: { type: string, format: date-time }
+
     ShiftStatus:
       type: string
       enum: [PLANNED, ACTIVE, CLOSED, CANCELLED]
+
+    CreateShiftRequest:
+      type: object
+      required: [scheduledStartAt, scheduledEndAt]
+      properties:
+        scheduledStartAt: { type: string, format: date-time }
+        scheduledEndAt: { type: string, format: date-time }
+
+    ConfigureShiftRequest:
+      type: object
+      required: [participants]
+      description: |
+        Должность берётся из workforce-service. Каждый активный стол должен встретиться ровно
+        один раз у официанта и ровно один раз у раннера.
+      properties:
+        participants:
+          type: array
+          items:
+            type: object
+            required: [membershipId, tableIds]
+            properties:
+              membershipId: { type: string, format: uuid }
+              tableIds:
+                type: array
+                minItems: 1
+                uniqueItems: true
+                items: { type: string, format: uuid }
+
+    ShiftParticipantResponse:
+      type: object
+      required: [membershipId, position, tableIds]
+      properties:
+        membershipId: { type: string, format: uuid }
+        position:
+          $ref: "#/components/schemas/EmployeePosition"
+        tableIds:
+          type: array
+          items: { type: string, format: uuid }
+
+    ShiftResponse:
+      type: object
+      required:
+        - id
+        - restaurantId
+        - name
+        - scheduledStartAt
+        - scheduledEndAt
+        - status
+        - responsibleMembershipId
+        - participants
+        - tasks
+      properties:
+        id: { type: string, format: uuid }
+        restaurantId: { type: string, format: uuid }
+        name: { type: string }
+        scheduledStartAt: { type: string, format: date-time }
+        scheduledEndAt: { type: string, format: date-time }
+        actualStartedAt: { type: [string, "null"], format: date-time }
+        actualClosedAt: { type: [string, "null"], format: date-time }
+        status:
+          $ref: "#/components/schemas/ShiftStatus"
+        responsibleMembershipId: { type: string, format: uuid }
+        participants:
+          type: array
+          items:
+            $ref: "#/components/schemas/ShiftParticipantResponse"
+        tasks:
+          type: array
+          items:
+            $ref: "#/components/schemas/TaskResponse"
+
+    ShiftSummaryResponse:
+      type: object
+      required:
+        [id, name, scheduledStartAt, scheduledEndAt, status, responsibleMembershipId, employeeCount, taskCount, completedTaskCount]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        scheduledStartAt: { type: string, format: date-time }
+        scheduledEndAt: { type: string, format: date-time }
+        actualStartedAt: { type: [string, "null"], format: date-time }
+        actualClosedAt: { type: [string, "null"], format: date-time }
+        status:
+          $ref: "#/components/schemas/ShiftStatus"
+        responsibleMembershipId: { type: string, format: uuid }
+        employeeCount: { type: integer, minimum: 0 }
+        taskCount: { type: integer, minimum: 0 }
+        completedTaskCount: { type: integer, minimum: 0 }
+
+    ShiftReportResponse:
+      type: object
+      required:
+        [shiftId, restaurantId, actualStartedAt, actualClosedAt, managerMembershipId, employeeMembershipIds, totalTasks, completedTasks, cancelledTasks, carriedOverTasks]
+      properties:
+        shiftId: { type: string, format: uuid }
+        restaurantId: { type: string, format: uuid }
+        actualStartedAt: { type: string, format: date-time }
+        actualClosedAt: { type: string, format: date-time }
+        managerMembershipId: { type: string, format: uuid }
+        employeeMembershipIds:
+          type: array
+          items: { type: string, format: uuid }
+        totalTasks: { type: integer, minimum: 0 }
+        completedTasks: { type: integer, minimum: 0 }
+        cancelledTasks: { type: integer, minimum: 0 }
+        carriedOverTasks: { type: integer, minimum: 0 }
+
+    CurrentShiftResponse:
+      type: object
+      required:
+        - id
+        - restaurantId
+        - scheduledStartAt
+        - scheduledEndAt
+        - actualStartedAt
+        - status
+        - assignedTableIds
+        - tasks
+      properties:
+        id: { type: string, format: uuid }
+        restaurantId: { type: string, format: uuid }
+        scheduledStartAt: { type: string, format: date-time }
+        scheduledEndAt: { type: string, format: date-time }
+        actualStartedAt: { type: string, format: date-time }
+        status:
+          $ref: "#/components/schemas/ShiftStatus"
+        assignedTableIds:
+          type: array
+          items: { type: string, format: uuid }
+        tasks:
+          type: array
+          description: Сначала незавершённые по ближайшему дедлайну, затем выполненные по времени выполнения.
+          items:
+            $ref: "#/components/schemas/TaskResponse"
 
     UnfinishedTaskAction:
       type: string

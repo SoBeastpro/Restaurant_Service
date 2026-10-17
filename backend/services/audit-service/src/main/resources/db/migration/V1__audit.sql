@@ -1,5 +1,14 @@
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
+CREATE OR REPLACE FUNCTION prevent_history_mutation()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    RAISE EXCEPTION '% is append-only', TG_TABLE_NAME;
+END;
+$$;
+
 CREATE TABLE activity_logs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL,
@@ -13,6 +22,11 @@ CREATE TABLE activity_logs (
     CONSTRAINT activity_logs_action_not_blank_check CHECK (BTRIM(action) <> ''),
     CONSTRAINT activity_logs_details_object_check CHECK (jsonb_typeof(details) = 'object')
 );
+
+CREATE INDEX activity_logs_user_created_idx
+    ON activity_logs (user_id, created_at DESC);
+CREATE INDEX activity_logs_restaurant_created_idx
+    ON activity_logs (restaurant_id, created_at DESC) WHERE restaurant_id IS NOT NULL;
 
 CREATE TABLE audit_logs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -35,8 +49,24 @@ CREATE TABLE audit_logs (
     CONSTRAINT audit_logs_action_not_blank_check CHECK (BTRIM(action) <> ''),
     CONSTRAINT audit_logs_outcome_check CHECK (outcome IN ('SUCCESS', 'DENIED', 'FAILED')),
     CONSTRAINT audit_logs_details_object_check CHECK (jsonb_typeof(details) = 'object'),
-    CONSTRAINT audit_logs_restaurant_scope_check CHECK (scope <> 'RESTAURANT' OR restaurant_id IS NOT NULL)
+    CONSTRAINT audit_logs_restaurant_scope_check CHECK (
+        scope <> 'RESTAURANT' OR restaurant_id IS NOT NULL
+    )
 );
+
+CREATE INDEX audit_logs_actor_created_idx
+    ON audit_logs (actor_user_id, created_at DESC) WHERE actor_user_id IS NOT NULL;
+CREATE INDEX audit_logs_subject_created_idx
+    ON audit_logs (subject_user_id, created_at DESC) WHERE subject_user_id IS NOT NULL;
+CREATE INDEX audit_logs_restaurant_created_idx
+    ON audit_logs (restaurant_id, created_at DESC) WHERE restaurant_id IS NOT NULL;
+CREATE INDEX audit_logs_scope_created_idx
+    ON audit_logs (scope, created_at DESC);
+CREATE INDEX audit_logs_entity_created_idx
+    ON audit_logs (entity_type, entity_id, created_at DESC)
+    WHERE entity_type IS NOT NULL AND entity_id IS NOT NULL;
+CREATE INDEX audit_logs_correlation_idx
+    ON audit_logs (correlation_id) WHERE correlation_id IS NOT NULL;
 
 CREATE TABLE system_events (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -54,24 +84,36 @@ CREATE TABLE system_events (
     CONSTRAINT system_events_details_object_check CHECK (jsonb_typeof(details) = 'object')
 );
 
-CREATE INDEX activity_logs_user_created_idx ON activity_logs (user_id, created_at DESC);
-CREATE INDEX activity_logs_restaurant_created_idx ON activity_logs (restaurant_id, created_at DESC) WHERE restaurant_id IS NOT NULL;
-CREATE INDEX audit_logs_actor_created_idx ON audit_logs (actor_user_id, created_at DESC);
-CREATE INDEX audit_logs_subject_created_idx ON audit_logs (subject_user_id, created_at DESC) WHERE subject_user_id IS NOT NULL;
-CREATE INDEX audit_logs_restaurant_created_idx ON audit_logs (restaurant_id, created_at DESC) WHERE restaurant_id IS NOT NULL;
-CREATE INDEX audit_logs_scope_created_idx ON audit_logs (scope, created_at DESC);
-CREATE INDEX audit_logs_entity_idx ON audit_logs (entity_type, entity_id, created_at DESC);
-CREATE INDEX audit_logs_correlation_idx ON audit_logs (correlation_id) WHERE correlation_id IS NOT NULL;
-CREATE INDEX system_events_level_created_idx ON system_events (level, created_at DESC);
-CREATE INDEX system_events_correlation_idx ON system_events (correlation_id) WHERE correlation_id IS NOT NULL;
+CREATE INDEX system_events_service_created_idx
+    ON system_events (service, created_at DESC);
+CREATE INDEX system_events_level_created_idx
+    ON system_events (level, created_at DESC);
+CREATE INDEX system_events_correlation_idx
+    ON system_events (correlation_id) WHERE correlation_id IS NOT NULL;
 
-CREATE OR REPLACE FUNCTION prevent_history_mutation()
-RETURNS TRIGGER LANGUAGE plpgsql AS $$
-BEGIN RAISE EXCEPTION '% is append-only', TG_TABLE_NAME; END;
-$$;
+CREATE TABLE inbox_messages (
+    message_id UUID PRIMARY KEY,
+    event_type VARCHAR(150) NOT NULL,
+    producer VARCHAR(100) NOT NULL,
+    received_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    processed_at TIMESTAMPTZ,
+    error_message VARCHAR(2000)
+);
 
-CREATE TRIGGER audit_logs_append_only BEFORE UPDATE OR DELETE ON audit_logs FOR EACH ROW EXECUTE FUNCTION prevent_history_mutation();
-CREATE TRIGGER activity_logs_append_only BEFORE UPDATE OR DELETE ON activity_logs FOR EACH ROW EXECUTE FUNCTION prevent_history_mutation();
-CREATE TRIGGER system_events_append_only BEFORE UPDATE OR DELETE ON system_events FOR EACH ROW EXECUTE FUNCTION prevent_history_mutation();
+CREATE INDEX inbox_unprocessed_idx
+    ON inbox_messages (received_at) WHERE processed_at IS NULL;
 
-COMMENT ON TABLE audit_logs IS 'Immutable projection built from events; all entity UUIDs belong to external services.';
+CREATE TRIGGER activity_logs_append_only
+BEFORE UPDATE OR DELETE ON activity_logs
+FOR EACH ROW EXECUTE FUNCTION prevent_history_mutation();
+
+CREATE TRIGGER audit_logs_append_only
+BEFORE UPDATE OR DELETE ON audit_logs
+FOR EACH ROW EXECUTE FUNCTION prevent_history_mutation();
+
+CREATE TRIGGER system_events_append_only
+BEFORE UPDATE OR DELETE ON system_events
+FOR EACH ROW EXECUTE FUNCTION prevent_history_mutation();
+
+COMMENT ON TABLE audit_logs IS
+    'Immutable projection built from events; all entity UUIDs belong to external services.';

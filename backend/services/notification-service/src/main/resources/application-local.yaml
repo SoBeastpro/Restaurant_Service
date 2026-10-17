@@ -1,0 +1,20 @@
+spring:
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:15432/notification_db}
+    username: ${DATABASE_USERNAME:notification_app}
+    password: ${DATABASE_PASSWORD:notification}
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:15673}
+    username: ${RABBITMQ_USERNAME:rest}
+    password: ${RABBITMQ_PASSWORD:rest}
+
+management:
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  level:
+    com.restaurant: DEBUG
+

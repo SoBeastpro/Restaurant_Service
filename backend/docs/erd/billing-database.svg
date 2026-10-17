@@ -1,0 +1,140 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1186" height="1068" viewBox="0 0 1186 1068">
+<rect width="100%" height="100%" fill="#F8FAFC"/>
+<defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#64748B"/></marker></defs>
+<text x="48" y="42" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="700" fill="#0F172A">Billing DB</text>
+<text x="48" y="70" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#475569">billing_db · 5 tables · generated from V1__billing.sql</text>
+<text x="1138" y="42" text-anchor="end" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#475569">PK primary key · FK PostgreSQL foreign key · LK logical cross-service UUID</text>
+<path d="M 638 132 H 593 V 132 H 548" fill="none" stroke="#94A3B8" stroke-width="2" marker-end="url(#arrow)"/>
+<path d="M 638 530 H 888 V 132 H 1138" fill="none" stroke="#94A3B8" stroke-width="2" marker-end="url(#arrow)"/>
+<g>
+<rect x="48" y="104" width="500" height="342" rx="8" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1.5"/>
+<path d="M 56 104 H 540 Q 548 104 548 112 V 144 H 48 V 112 Q 48 104 56 104" fill="#FFF0CF"/>
+<text x="64" y="131" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="700" fill="#8D6210">tariff_plans</text>
+<text x="64" y="166" font-family="Menlo, Consolas, monospace" font-size="13" fill="#0F172A">id</text>
+<text x="378" y="166" font-family="Menlo, Consolas, monospace" font-size="12" fill="#475569">UUID</text>
+<text x="532" y="166" text-anchor="end" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="700" fill="#8D6210">PK</text>
+<text x="64" y="190" font-family="Menlo, Consolas, monospace" font-size="13" fill="#0F172A">code</text>
+<text x="378" y="190" font-family="Menlo, Consolas, monospace" font-size="12" fill="#475569">VARCHAR(50)</text>
+<text x="64" y="214" font-family="Menlo, Consolas, monospace" font-size="13" fill="#0F172A">name</text>
+<text x="378" y="214" font-family="Menlo, Consolas, monospace" font-size="12" fill="#475569">VARCHAR(100)</text>
+<text x="64" y="238" font-family="Menlo, Consolas, monospace" font-size="13" fill="#0F172A">description</text>
+<text x="378" y="238" font-family="Menlo, Consolas, monospace" font-size="12" fill="#475569">TEXT?</text>
+<text x="64" y="262" font-family="Menlo, Consolas, monospace" font-size="13" fill="#0F172A">price</text>
+<text x="378" y="262" font-family="Menlo, Consolas, monospace" font-size="12" fill="#475569">NUMERIC(12, 2)</text>
+<text x="64" y="286" font-family="Menlo, Consolas, monospace" font-size="13" fill="#0F172A">currency</text>
+<text x="378" y="286" font-family="Menlo, Consolas, monospace" font-size="12" fill="#475569">CHAR(3)</text>
+<text x="64" y="310" font-family="Menlo, Consolas, monospace" font-size="13" fill="#0F172A">duration_days</text>
+<text x="378" y="310" font-family="Menlo, Consolas, monospace" font-size="12" fill="#475569">INTEGER</text>
+<text x="64" y="334" font-family="Menlo, Consolas, monospace" font-size="13" fill="#0F172A">features</text>
+<text x="378" y="334" font-family="Menlo, Consolas, monospace" font-size="12" fill="#475569">JSONB</text>
+<text x="64" y="358" font-family="Menlo, Consolas, monospace" font-size="13" fill="#0F172A">status</text>
+<text x="378" y="358" font-family="Menlo, Consolas, monospace" font-size="12" fill="#475569">VARCHAR(20)</text>
+<text x="64" y="382" font-family="Menlo, Consolas, monospace" font-size="13" fill="#0F172A">created_by_user_id</text>
+<text x="378" y="382" font-family="Menlo, Consolas, monospace" font-size="12" fill="#475569">UUID?</text>
+<text x="532" y="382" text-anchor="end" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="700" fill="#B45309">LK</text>
+<text x="64" y="406" font-family="Menlo, Consolas, monospace" font-size="13" fill="#0F172A">created_at</text>
+<text x="378" y="406" font-family="Menlo, Consolas, monospace" font-size="12" fill="#475569">TIMESTAMPTZ</text>
+<text x="64" y="430" font-family="Menlo, Consolas, monospace" font-size="13" fill="#0F172A">updated_at</text>
+<text x="378" y="430" font-family="Menlo, Consolas, monospace" font-size="12" fill="#475569">TIMESTAMPTZ</text>
+</g>
+<g>
+<rect x="638" y="104" width="500" height="318" rx="8" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1.5"/>
+<path d="M 646 104 H 1130 Q 1138 104 1138 112 V 144 H 638 V 112 Q 638 104 646 104" fill="#FFF0CF"/>
+<text x="654" y="131" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="700" fill="#8D6210">subscriptions</text>
+<text x="654" y="166" font-family="Menlo, Consolas, monospace" font-size="13" fill="#0F172A">id</text>
+<text x="968" y="166" font-family="Menlo, Consolas, monospace" font-size="12" fill="#475569">UUID</text>
+<text x="1122" y="166" text-anchor="end" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="700" fill="#8D6210">PK</text>
+<text x="654" y="190" font-family="Menlo, Consolas, monospace" font-size="13" fill="#0F172A">restaurant_id</text>
+<text x="968" y="190" font-family="Menlo, Consolas, monospace" font-size="12" fill="#475569">UUID</text>
+<text x="1122" y="190" text-anchor="end" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="700" fill="#B45309">LK</text>
+<text x="654" y="214" font-family="Menlo, Consolas, monospace" font-size="13" fill="#0F172A">plan_id</text>
+<text x="968" y="214" font-family="Menlo, Consolas, monospace" font-size="12" fill="#475569">UUID</text>
+<text x="1122" y="214" text-anchor="end" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="700" fill="#8D6210">FK</text>
+<text x="654" y="238" font-family="Menlo, Consolas, monospace" font-size="13" fill="#0F172A">activated_by_membership_id</text>
+<text x="968" y="238" font-family="Menlo, Consolas, monospace" font-size="12" fill="#475569">UUID</text>
+<text x="1122" y="238" text-anchor="end" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="700" fill="#B45309">LK</text>
+<text x="654" y="262" font-family="Menlo, Consolas, monospace" font-size="13" fill="#0F172A">status</text>
+<text x="968" y="262" font-family="Menlo, Consolas, monospace" font-size="12" fill="#475569">VARCHAR(20)</text>
+<text x="654" y="286" font-family="Menlo, Consolas, monospace" font-size="13" fill="#0F172A">activation_mode</text>
+<text x="968" y="286" font-family="Menlo, Consolas, monospace" font-size="12" fill="#475569">VARCHAR(20)</text>
+<text x="654" y="310" font-family="Menlo, Consolas, monospace" font-size="13" fill="#0F172A">starts_at</text>
+<text x="968" y="310" font-family="Menlo, Consolas, monospace" font-size="12" fill="#475569">TIMESTAMPTZ</text>
+<text x="654" y="334" font-family="Menlo, Consolas, monospace" font-size="13" fill="#0F172A">ends_at</text>
+<text x="968" y="334" font-family="Menlo, Consolas, monospace" font-size="12" fill="#475569">TIMESTAMPTZ</text>
+<text x="654" y="358" font-family="Menlo, Consolas, monospace" font-size="13" fill="#0F172A">cancelled_at</text>
+<text x="968" y="358" font-family="Menlo, Consolas, monospace" font-size="12" fill="#475569">TIMESTAMPTZ?</text>
+<text x="654" y="382" font-family="Menlo, Consolas, monospace" font-size="13" fill="#0F172A">created_at</text>
+<text x="968" y="382" font-family="Menlo, Consolas, monospace" font-size="12" fill="#475569">TIMESTAMPTZ</text>
+<text x="654" y="406" font-family="Menlo, Consolas, monospace" font-size="13" fill="#0F172A">updated_at</text>
+<text x="968" y="406" font-family="Menlo, Consolas, monospace" font-size="12" fill="#475569">TIMESTAMPTZ</text>
+</g>
+<g>
+<rect x="638" y="502" width="500" height="198" rx="8" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1.5"/>
+<path d="M 646 502 H 1130 Q 1138 502 1138 510 V 542 H 638 V 510 Q 638 502 646 502" fill="#FFF0CF"/>
+<text x="654" y="529" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="700" fill="#8D6210">subscription_events</text>
+<text x="654" y="564" font-family="Menlo, Consolas, monospace" font-size="13" fill="#0F172A">id</text>
+<text x="968" y="564" font-family="Menlo, Consolas, monospace" font-size="12" fill="#475569">UUID</text>
+<text x="1122" y="564" text-anchor="end" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="700" fill="#8D6210">PK</text>
+<text x="654" y="588" font-family="Menlo, Consolas, monospace" font-size="13" fill="#0F172A">subscription_id</text>
+<text x="968" y="588" font-family="Menlo, Consolas, monospace" font-size="12" fill="#475569">UUID</text>
+<text x="1122" y="588" text-anchor="end" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="700" fill="#8D6210">FK</text>
+<text x="654" y="612" font-family="Menlo, Consolas, monospace" font-size="13" fill="#0F172A">actor_user_id</text>
+<text x="968" y="612" font-family="Menlo, Consolas, monospace" font-size="12" fill="#475569">UUID?</text>
+<text x="1122" y="612" text-anchor="end" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="700" fill="#B45309">LK</text>
+<text x="654" y="636" font-family="Menlo, Consolas, monospace" font-size="13" fill="#0F172A">event_type</text>
+<text x="968" y="636" font-family="Menlo, Consolas, monospace" font-size="12" fill="#475569">VARCHAR(20)</text>
+<text x="654" y="660" font-family="Menlo, Consolas, monospace" font-size="13" fill="#0F172A">details</text>
+<text x="968" y="660" font-family="Menlo, Consolas, monospace" font-size="12" fill="#475569">JSONB</text>
+<text x="654" y="684" font-family="Menlo, Consolas, monospace" font-size="13" fill="#0F172A">created_at</text>
+<text x="968" y="684" font-family="Menlo, Consolas, monospace" font-size="12" fill="#475569">TIMESTAMPTZ</text>
+</g>
+<g>
+<rect x="48" y="526" width="500" height="342" rx="8" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1.5"/>
+<path d="M 56 526 H 540 Q 548 526 548 534 V 566 H 48 V 534 Q 48 526 56 526" fill="#FFF0CF"/>
+<text x="64" y="553" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="700" fill="#8D6210">outbox_events</text>
+<text x="64" y="588" font-family="Menlo, Consolas, monospace" font-size="13" fill="#0F172A">id</text>
+<text x="378" y="588" font-family="Menlo, Consolas, monospace" font-size="12" fill="#475569">UUID</text>
+<text x="532" y="588" text-anchor="end" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="700" fill="#8D6210">PK</text>
+<text x="64" y="612" font-family="Menlo, Consolas, monospace" font-size="13" fill="#0F172A">aggregate_type</text>
+<text x="378" y="612" font-family="Menlo, Consolas, monospace" font-size="12" fill="#475569">VARCHAR(100)</text>
+<text x="64" y="636" font-family="Menlo, Consolas, monospace" font-size="13" fill="#0F172A">aggregate_id</text>
+<text x="378" y="636" font-family="Menlo, Consolas, monospace" font-size="12" fill="#475569">UUID</text>
+<text x="64" y="660" font-family="Menlo, Consolas, monospace" font-size="13" fill="#0F172A">event_type</text>
+<text x="378" y="660" font-family="Menlo, Consolas, monospace" font-size="12" fill="#475569">VARCHAR(150)</text>
+<text x="64" y="684" font-family="Menlo, Consolas, monospace" font-size="13" fill="#0F172A">event_version</text>
+<text x="378" y="684" font-family="Menlo, Consolas, monospace" font-size="12" fill="#475569">INTEGER</text>
+<text x="64" y="708" font-family="Menlo, Consolas, monospace" font-size="13" fill="#0F172A">payload</text>
+<text x="378" y="708" font-family="Menlo, Consolas, monospace" font-size="12" fill="#475569">JSONB</text>
+<text x="64" y="732" font-family="Menlo, Consolas, monospace" font-size="13" fill="#0F172A">headers</text>
+<text x="378" y="732" font-family="Menlo, Consolas, monospace" font-size="12" fill="#475569">JSONB</text>
+<text x="64" y="756" font-family="Menlo, Consolas, monospace" font-size="13" fill="#0F172A">occurred_at</text>
+<text x="378" y="756" font-family="Menlo, Consolas, monospace" font-size="12" fill="#475569">TIMESTAMPTZ</text>
+<text x="64" y="780" font-family="Menlo, Consolas, monospace" font-size="13" fill="#0F172A">available_at</text>
+<text x="378" y="780" font-family="Menlo, Consolas, monospace" font-size="12" fill="#475569">TIMESTAMPTZ</text>
+<text x="64" y="804" font-family="Menlo, Consolas, monospace" font-size="13" fill="#0F172A">published_at</text>
+<text x="378" y="804" font-family="Menlo, Consolas, monospace" font-size="12" fill="#475569">TIMESTAMPTZ?</text>
+<text x="64" y="828" font-family="Menlo, Consolas, monospace" font-size="13" fill="#0F172A">attempts_count</text>
+<text x="378" y="828" font-family="Menlo, Consolas, monospace" font-size="12" fill="#475569">INTEGER</text>
+<text x="64" y="852" font-family="Menlo, Consolas, monospace" font-size="13" fill="#0F172A">last_error</text>
+<text x="378" y="852" font-family="Menlo, Consolas, monospace" font-size="12" fill="#475569">VARCHAR(2000)?</text>
+</g>
+<g>
+<rect x="638" y="780" width="500" height="198" rx="8" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1.5"/>
+<path d="M 646 780 H 1130 Q 1138 780 1138 788 V 820 H 638 V 788 Q 638 780 646 780" fill="#FFF0CF"/>
+<text x="654" y="807" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="700" fill="#8D6210">inbox_messages</text>
+<text x="654" y="842" font-family="Menlo, Consolas, monospace" font-size="13" fill="#0F172A">message_id</text>
+<text x="968" y="842" font-family="Menlo, Consolas, monospace" font-size="12" fill="#475569">UUID</text>
+<text x="1122" y="842" text-anchor="end" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="700" fill="#8D6210">PK</text>
+<text x="654" y="866" font-family="Menlo, Consolas, monospace" font-size="13" fill="#0F172A">event_type</text>
+<text x="968" y="866" font-family="Menlo, Consolas, monospace" font-size="12" fill="#475569">VARCHAR(150)</text>
+<text x="654" y="890" font-family="Menlo, Consolas, monospace" font-size="13" fill="#0F172A">producer</text>
+<text x="968" y="890" font-family="Menlo, Consolas, monospace" font-size="12" fill="#475569">VARCHAR(100)</text>
+<text x="654" y="914" font-family="Menlo, Consolas, monospace" font-size="13" fill="#0F172A">received_at</text>
+<text x="968" y="914" font-family="Menlo, Consolas, monospace" font-size="12" fill="#475569">TIMESTAMPTZ</text>
+<text x="654" y="938" font-family="Menlo, Consolas, monospace" font-size="13" fill="#0F172A">processed_at</text>
+<text x="968" y="938" font-family="Menlo, Consolas, monospace" font-size="12" fill="#475569">TIMESTAMPTZ?</text>
+<text x="654" y="962" font-family="Menlo, Consolas, monospace" font-size="13" fill="#0F172A">error_message</text>
+<text x="968" y="962" font-family="Menlo, Consolas, monospace" font-size="12" fill="#475569">VARCHAR(2000)?</text>
+</g>
+<text x="48" y="1050" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#64748B">Nullable columns are marked with ?. Solid arrows are physical foreign keys inside this database.</text>
+</svg>

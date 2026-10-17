@@ -1,8 +1,13 @@
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 CREATE OR REPLACE FUNCTION set_updated_at()
-RETURNS TRIGGER LANGUAGE plpgsql AS $$
-BEGIN NEW.updated_at = CURRENT_TIMESTAMP; RETURN NEW; END;
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    NEW.updated_at = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
 $$;
 
 CREATE TABLE tariff_plans (
@@ -44,9 +49,12 @@ CREATE TABLE subscriptions (
     CONSTRAINT subscriptions_cancelled_at_check CHECK (status <> 'CANCELLED' OR cancelled_at IS NOT NULL)
 );
 
-CREATE UNIQUE INDEX subscriptions_one_active_per_restaurant_key ON subscriptions (restaurant_id) WHERE status = 'ACTIVE';
-CREATE INDEX subscriptions_restaurant_history_idx ON subscriptions (restaurant_id, starts_at DESC);
-CREATE INDEX subscriptions_ends_idx ON subscriptions (ends_at) WHERE status = 'ACTIVE';
+CREATE UNIQUE INDEX subscriptions_one_active_per_restaurant_key
+    ON subscriptions (restaurant_id) WHERE status = 'ACTIVE';
+CREATE INDEX subscriptions_restaurant_history_idx
+    ON subscriptions (restaurant_id, starts_at DESC);
+CREATE INDEX subscriptions_active_ends_idx
+    ON subscriptions (ends_at) WHERE status = 'ACTIVE';
 
 CREATE TABLE subscription_events (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -55,18 +63,68 @@ CREATE TABLE subscription_events (
     event_type VARCHAR(20) NOT NULL,
     details JSONB NOT NULL DEFAULT '{}'::JSONB,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT subscription_events_type_check CHECK (event_type IN ('ACTIVATED', 'EXTENDED', 'EXPIRED', 'CANCELLED')),
+    CONSTRAINT subscription_events_type_check CHECK (
+        event_type IN ('ACTIVATED', 'EXTENDED', 'EXPIRED', 'CANCELLED')
+    ),
     CONSTRAINT subscription_events_details_object_check CHECK (jsonb_typeof(details) = 'object')
 );
 
-CREATE INDEX subscription_events_subscription_created_idx ON subscription_events (subscription_id, created_at DESC);
-CREATE TRIGGER tariff_plans_set_updated_at BEFORE UPDATE ON tariff_plans FOR EACH ROW EXECUTE FUNCTION set_updated_at();
-CREATE TRIGGER subscriptions_set_updated_at BEFORE UPDATE ON subscriptions FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE INDEX subscription_events_subscription_created_idx
+    ON subscription_events (subscription_id, created_at DESC);
+
+CREATE TABLE outbox_events (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    aggregate_type VARCHAR(100) NOT NULL,
+    aggregate_id UUID NOT NULL,
+    event_type VARCHAR(150) NOT NULL,
+    event_version INTEGER NOT NULL DEFAULT 1,
+    payload JSONB NOT NULL,
+    headers JSONB NOT NULL DEFAULT '{}'::JSONB,
+    occurred_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    available_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    published_at TIMESTAMPTZ,
+    attempts_count INTEGER NOT NULL DEFAULT 0,
+    last_error VARCHAR(2000),
+    CONSTRAINT outbox_payload_object_check CHECK (jsonb_typeof(payload) = 'object'),
+    CONSTRAINT outbox_headers_object_check CHECK (jsonb_typeof(headers) = 'object'),
+    CONSTRAINT outbox_attempts_check CHECK (attempts_count >= 0)
+);
+
+CREATE INDEX outbox_unpublished_idx
+    ON outbox_events (available_at, occurred_at) WHERE published_at IS NULL;
+
+CREATE TABLE inbox_messages (
+    message_id UUID PRIMARY KEY,
+    event_type VARCHAR(150) NOT NULL,
+    producer VARCHAR(100) NOT NULL,
+    received_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    processed_at TIMESTAMPTZ,
+    error_message VARCHAR(2000)
+);
+
+CREATE INDEX inbox_unprocessed_idx
+    ON inbox_messages (received_at) WHERE processed_at IS NULL;
+
+CREATE TRIGGER tariff_plans_set_updated_at
+BEFORE UPDATE ON tariff_plans
+FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+CREATE TRIGGER subscriptions_set_updated_at
+BEFORE UPDATE ON subscriptions
+FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 INSERT INTO tariff_plans (id, code, name, description, price, duration_days, features) VALUES
-    ('00000000-0000-0000-0000-000000000100', 'MONTHLY_PLACEHOLDER',
-     'Условная месячная подписка', 'Временный тариф до подключения платёжного провайдера',
-     0, 30, '{"placeholder": true}'::JSONB);
+    (
+        '00000000-0000-0000-0000-000000000100',
+        'MONTHLY_PLACEHOLDER',
+        'Условная месячная подписка',
+        'Временный тариф до подключения платёжного провайдера',
+        0,
+        30,
+        '{"placeholder": true}'::JSONB
+    );
 
-COMMENT ON COLUMN subscriptions.restaurant_id IS 'External restaurant-service UUID; no cross-database FK.';
-COMMENT ON COLUMN subscriptions.activated_by_membership_id IS 'External workforce-service membership UUID.';
+COMMENT ON COLUMN subscriptions.restaurant_id IS
+    'External restaurant-service UUID; no cross-database FK.';
+COMMENT ON COLUMN subscriptions.activated_by_membership_id IS
+    'External workforce-service membership UUID.';

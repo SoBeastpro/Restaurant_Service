@@ -1,10 +1,21 @@
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 CREATE OR REPLACE FUNCTION set_updated_at()
-RETURNS TRIGGER LANGUAGE plpgsql AS $$
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
 BEGIN
     NEW.updated_at = CURRENT_TIMESTAMP;
     RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION prevent_history_mutation()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    RAISE EXCEPTION '% is append-only', TG_TABLE_NAME;
 END;
 $$;
 
@@ -23,7 +34,9 @@ CREATE TABLE permissions (
     description VARCHAR(500),
     is_individually_assignable BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT permissions_domain_check CHECK (domain IN ('RESTAURANT', 'WORKFORCE', 'OPERATIONS', 'BILLING', 'AUDIT'))
+    CONSTRAINT permissions_domain_check CHECK (
+        domain IN ('RESTAURANT', 'WORKFORCE', 'OPERATIONS', 'BILLING', 'AUDIT')
+    )
 );
 
 CREATE TABLE restaurant_role_permissions (
@@ -50,15 +63,20 @@ CREATE TABLE restaurant_members (
     CONSTRAINT restaurant_members_id_restaurant_key UNIQUE (id, restaurant_id),
     CONSTRAINT restaurant_members_first_name_not_blank_check CHECK (BTRIM(first_name) <> ''),
     CONSTRAINT restaurant_members_last_name_not_blank_check CHECK (BTRIM(last_name) <> ''),
-    CONSTRAINT restaurant_members_status_check CHECK (status IN ('INVITED', 'ACTIVE', 'INACTIVE', 'BLOCKED', 'ARCHIVED')),
+    CONSTRAINT restaurant_members_status_check CHECK (
+        status IN ('INVITED', 'ACTIVE', 'INACTIVE', 'BLOCKED', 'ARCHIVED')
+    ),
     CONSTRAINT restaurant_members_blocked_at_check CHECK (status <> 'BLOCKED' OR blocked_at IS NOT NULL),
     CONSTRAINT restaurant_members_archived_at_check CHECK (status <> 'ARCHIVED' OR archived_at IS NOT NULL)
 );
 
-CREATE UNIQUE INDEX restaurant_members_user_restaurant_key ON restaurant_members (user_id, restaurant_id) WHERE user_id IS NOT NULL;
-CREATE UNIQUE INDEX restaurant_members_one_director_key ON restaurant_members (restaurant_id) WHERE role_code = 'DIRECTOR' AND status <> 'ARCHIVED';
-CREATE INDEX restaurant_members_restaurant_status_idx ON restaurant_members (restaurant_id, status);
-CREATE INDEX restaurant_members_user_idx ON restaurant_members (user_id) WHERE user_id IS NOT NULL;
+CREATE UNIQUE INDEX restaurant_members_user_restaurant_key
+    ON restaurant_members (user_id, restaurant_id) WHERE user_id IS NOT NULL;
+CREATE UNIQUE INDEX restaurant_members_one_director_key
+    ON restaurant_members (restaurant_id)
+    WHERE role_code = 'DIRECTOR' AND status <> 'ARCHIVED';
+CREATE INDEX restaurant_members_restaurant_status_idx
+    ON restaurant_members (restaurant_id, status);
 
 CREATE TABLE member_permission_overrides (
     membership_id UUID NOT NULL REFERENCES restaurant_members(id) ON DELETE CASCADE,
@@ -76,12 +94,22 @@ CREATE TABLE member_permission_history (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     membership_id UUID NOT NULL REFERENCES restaurant_members(id) ON DELETE RESTRICT,
     permission_code VARCHAR(100) NOT NULL REFERENCES permissions(code) ON DELETE RESTRICT,
-    old_effect VARCHAR(10), new_effect VARCHAR(10), changed_by_user_id UUID NOT NULL,
-    reason VARCHAR(1000), created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT member_permission_history_old_effect_check CHECK (old_effect IS NULL OR old_effect IN ('GRANT', 'DENY')),
-    CONSTRAINT member_permission_history_new_effect_check CHECK (new_effect IS NULL OR new_effect IN ('GRANT', 'DENY')),
+    old_effect VARCHAR(10),
+    new_effect VARCHAR(10),
+    changed_by_user_id UUID NOT NULL,
+    reason VARCHAR(1000),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT member_permission_history_old_effect_check CHECK (
+        old_effect IS NULL OR old_effect IN ('GRANT', 'DENY')
+    ),
+    CONSTRAINT member_permission_history_new_effect_check CHECK (
+        new_effect IS NULL OR new_effect IN ('GRANT', 'DENY')
+    ),
     CONSTRAINT member_permission_history_change_check CHECK (old_effect IS DISTINCT FROM new_effect)
 );
+
+CREATE INDEX member_permission_history_member_created_idx
+    ON member_permission_history (membership_id, created_at DESC);
 
 CREATE TABLE invitations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -90,7 +118,7 @@ CREATE TABLE invitations (
     created_by_membership_id UUID NOT NULL,
     accepted_by_user_id UUID,
     replaces_invitation_id UUID REFERENCES invitations(id) ON DELETE SET NULL,
-    email VARCHAR(320) NOT NULL,
+    email VARCHAR(320),
     role_code VARCHAR(30) NOT NULL REFERENCES restaurant_roles(code) ON DELETE RESTRICT,
     token_hash VARCHAR(64) NOT NULL UNIQUE,
     status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
@@ -103,18 +131,53 @@ CREATE TABLE invitations (
     CONSTRAINT invitations_creator_restaurant_fk FOREIGN KEY (created_by_membership_id, restaurant_id)
         REFERENCES restaurant_members(id, restaurant_id) ON DELETE RESTRICT,
     CONSTRAINT invitations_token_hash_length_check CHECK (LENGTH(token_hash) = 64),
-    CONSTRAINT invitations_email_not_blank_check CHECK (BTRIM(email) <> ''),
     CONSTRAINT invitations_status_check CHECK (status IN ('PENDING', 'ACCEPTED', 'EXPIRED', 'REVOKED')),
     CONSTRAINT invitations_expiration_check CHECK (expires_at > created_at),
-    CONSTRAINT invitations_acceptance_check CHECK (status <> 'ACCEPTED' OR (accepted_at IS NOT NULL AND accepted_by_user_id IS NOT NULL)),
+    CONSTRAINT invitations_acceptance_check CHECK (
+        status <> 'ACCEPTED' OR (accepted_at IS NOT NULL AND accepted_by_user_id IS NOT NULL)
+    ),
     CONSTRAINT invitations_revocation_check CHECK (status <> 'REVOKED' OR revoked_at IS NOT NULL)
 );
 
-CREATE UNIQUE INDEX invitations_one_pending_per_member_key ON invitations (membership_id) WHERE status = 'PENDING';
-CREATE INDEX invitations_restaurant_status_idx ON invitations (restaurant_id, status);
-CREATE INDEX invitations_email_lower_idx ON invitations (LOWER(email));
-CREATE INDEX invitations_expires_idx ON invitations (expires_at) WHERE status = 'PENDING';
-CREATE INDEX member_permission_history_member_created_idx ON member_permission_history (membership_id, created_at DESC);
+CREATE UNIQUE INDEX invitations_one_pending_per_member_key
+    ON invitations (membership_id) WHERE status = 'PENDING';
+CREATE INDEX invitations_restaurant_status_created_idx
+    ON invitations (restaurant_id, status, created_at DESC);
+CREATE INDEX invitations_pending_expiration_idx
+    ON invitations (expires_at) WHERE status = 'PENDING';
+
+CREATE TABLE outbox_events (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    aggregate_type VARCHAR(100) NOT NULL,
+    aggregate_id UUID NOT NULL,
+    event_type VARCHAR(150) NOT NULL,
+    event_version INTEGER NOT NULL DEFAULT 1,
+    payload JSONB NOT NULL,
+    headers JSONB NOT NULL DEFAULT '{}'::JSONB,
+    occurred_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    available_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    published_at TIMESTAMPTZ,
+    attempts_count INTEGER NOT NULL DEFAULT 0,
+    last_error VARCHAR(2000),
+    CONSTRAINT outbox_payload_object_check CHECK (jsonb_typeof(payload) = 'object'),
+    CONSTRAINT outbox_headers_object_check CHECK (jsonb_typeof(headers) = 'object'),
+    CONSTRAINT outbox_attempts_check CHECK (attempts_count >= 0)
+);
+
+CREATE INDEX outbox_unpublished_idx
+    ON outbox_events (available_at, occurred_at) WHERE published_at IS NULL;
+
+CREATE TABLE inbox_messages (
+    message_id UUID PRIMARY KEY,
+    event_type VARCHAR(150) NOT NULL,
+    producer VARCHAR(100) NOT NULL,
+    received_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    processed_at TIMESTAMPTZ,
+    error_message VARCHAR(2000)
+);
+
+CREATE INDEX inbox_unprocessed_idx
+    ON inbox_messages (received_at) WHERE processed_at IS NULL;
 
 CREATE OR REPLACE VIEW effective_member_permissions AS
 SELECT permission_set.membership_id, permission_set.permission_code
@@ -124,7 +187,8 @@ FROM (
     JOIN restaurant_role_permissions role_permission ON role_permission.role_code = member.role_code
     WHERE member.status IN ('ACTIVE', 'INACTIVE')
       AND NOT EXISTS (
-          SELECT 1 FROM member_permission_overrides override_permission
+          SELECT 1
+          FROM member_permission_overrides override_permission
           WHERE override_permission.membership_id = member.id
             AND override_permission.permission_code = role_permission.permission_code
             AND override_permission.effect = 'DENY'
@@ -133,30 +197,42 @@ FROM (
     SELECT override_permission.membership_id, override_permission.permission_code
     FROM member_permission_overrides override_permission
     JOIN restaurant_members member ON member.id = override_permission.membership_id
-    WHERE override_permission.effect = 'GRANT' AND member.status IN ('ACTIVE', 'INACTIVE')
+    WHERE override_permission.effect = 'GRANT'
+      AND member.status IN ('ACTIVE', 'INACTIVE')
 ) permission_set;
 
 CREATE OR REPLACE FUNCTION validate_permission_override()
-RETURNS TRIGGER LANGUAGE plpgsql AS $$
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM permissions WHERE code = NEW.permission_code AND is_individually_assignable) THEN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM permissions
+        WHERE code = NEW.permission_code
+          AND is_individually_assignable
+    ) THEN
         RAISE EXCEPTION 'Permission % cannot be assigned individually', NEW.permission_code;
     END IF;
     RETURN NEW;
 END;
 $$;
 
-CREATE OR REPLACE FUNCTION prevent_history_mutation()
-RETURNS TRIGGER LANGUAGE plpgsql AS $$
-BEGIN
-    RAISE EXCEPTION '% is append-only', TG_TABLE_NAME;
-END;
-$$;
+CREATE TRIGGER restaurant_members_set_updated_at
+BEFORE UPDATE ON restaurant_members
+FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
-CREATE TRIGGER restaurant_members_set_updated_at BEFORE UPDATE ON restaurant_members FOR EACH ROW EXECUTE FUNCTION set_updated_at();
-CREATE TRIGGER member_permission_overrides_set_updated_at BEFORE UPDATE ON member_permission_overrides FOR EACH ROW EXECUTE FUNCTION set_updated_at();
-CREATE TRIGGER member_permission_overrides_validate BEFORE INSERT OR UPDATE OF permission_code ON member_permission_overrides FOR EACH ROW EXECUTE FUNCTION validate_permission_override();
-CREATE TRIGGER member_permission_history_append_only BEFORE UPDATE OR DELETE ON member_permission_history FOR EACH ROW EXECUTE FUNCTION prevent_history_mutation();
+CREATE TRIGGER member_permission_overrides_set_updated_at
+BEFORE UPDATE ON member_permission_overrides
+FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+CREATE TRIGGER member_permission_overrides_validate
+BEFORE INSERT OR UPDATE OF permission_code ON member_permission_overrides
+FOR EACH ROW EXECUTE FUNCTION validate_permission_override();
+
+CREATE TRIGGER member_permission_history_append_only
+BEFORE UPDATE OR DELETE ON member_permission_history
+FOR EACH ROW EXECUTE FUNCTION prevent_history_mutation();
 
 INSERT INTO restaurant_roles (code, name, description, hierarchy_level) VALUES
     ('EMPLOYEE', 'Сотрудник', 'Исполнитель задач ресторана', 10),
@@ -203,19 +279,34 @@ INSERT INTO permissions (code, domain, name, is_individually_assignable) VALUES
     ('AUDIT_VIEW_RESTAURANT', 'AUDIT', 'Просмотр аудита ресторана', TRUE);
 
 INSERT INTO restaurant_role_permissions (role_code, permission_code) VALUES
-    ('EMPLOYEE', 'RESTAURANT_VIEW'), ('EMPLOYEE', 'TABLE_VIEW'),
-    ('EMPLOYEE', 'SHIFT_VIEW_SELF'), ('EMPLOYEE', 'SHIFT_SELF_COMPLETE'),
-    ('EMPLOYEE', 'TASK_VIEW_OWN'), ('EMPLOYEE', 'TASK_EXECUTE'),
-    ('EMPLOYEE', 'DASHBOARD_VIEW_SELF'), ('EMPLOYEE', 'AUDIT_VIEW_SELF');
+    ('EMPLOYEE', 'RESTAURANT_VIEW'),
+    ('EMPLOYEE', 'TABLE_VIEW'),
+    ('EMPLOYEE', 'SHIFT_VIEW_SELF'),
+    ('EMPLOYEE', 'SHIFT_SELF_COMPLETE'),
+    ('EMPLOYEE', 'TASK_VIEW_OWN'),
+    ('EMPLOYEE', 'TASK_EXECUTE'),
+    ('EMPLOYEE', 'DASHBOARD_VIEW_SELF'),
+    ('EMPLOYEE', 'AUDIT_VIEW_SELF');
 
 INSERT INTO restaurant_role_permissions (role_code, permission_code)
-SELECT 'MANAGER', code FROM permissions
-WHERE code NOT IN ('RESTAURANT_EDIT', 'RESTAURANT_ARCHIVE', 'HALL_MANAGE', 'TABLE_MANAGE',
-                   'MEMBER_MANAGE_MANAGER', 'INVITATION_MANAGE_ALL',
-                   'MEMBER_PERMISSION_MANAGE_MANAGER', 'SUBSCRIPTION_VIEW', 'SUBSCRIPTION_ACTIVATE');
+SELECT 'MANAGER', code
+FROM permissions
+WHERE code NOT IN (
+    'RESTAURANT_EDIT',
+    'RESTAURANT_ARCHIVE',
+    'HALL_MANAGE',
+    'TABLE_MANAGE',
+    'MEMBER_MANAGE_MANAGER',
+    'INVITATION_MANAGE_ALL',
+    'MEMBER_PERMISSION_MANAGE_MANAGER',
+    'SUBSCRIPTION_VIEW',
+    'SUBSCRIPTION_ACTIVATE'
+);
 
 INSERT INTO restaurant_role_permissions (role_code, permission_code)
 SELECT 'DIRECTOR', code FROM permissions;
 
-COMMENT ON COLUMN restaurant_members.restaurant_id IS 'External restaurant-service UUID; no cross-database FK.';
-COMMENT ON COLUMN restaurant_members.user_id IS 'External identity-service UUID; nullable until invitation acceptance.';
+COMMENT ON COLUMN restaurant_members.restaurant_id IS
+    'External restaurant-service UUID; no cross-database FK.';
+COMMENT ON COLUMN restaurant_members.user_id IS
+    'External identity-service UUID; nullable until invitation acceptance.';

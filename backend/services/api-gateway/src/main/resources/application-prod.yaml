@@ -1,0 +1,34 @@
+spring:
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD}
+      ssl:
+        enabled: ${REDIS_SSL_ENABLED:true}
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: ${JWT_JWK_SET_URI}
+          issuer-uri: ${JWT_ISSUER}
+          audiences: ["${JWT_AUDIENCE:restaurant-api}"]
+
+services:
+  identity: { url: "${IDENTITY_SERVICE_URL}" }
+  restaurant: { url: "${RESTAURANT_SERVICE_URL}", ws-url: "${RESTAURANT_WEBSOCKET_URL}" }
+  workforce: { url: "${WORKFORCE_SERVICE_URL}" }
+  operations: { url: "${OPERATIONS_SERVICE_URL}" }
+  billing: { url: "${BILLING_SERVICE_URL}" }
+  notification: { url: "${NOTIFICATION_SERVICE_URL}" }
+  audit: { url: "${AUDIT_SERVICE_URL}" }
+  reporting: { url: "${REPORTING_SERVICE_URL}" }
+
+server:
+  forward-headers-strategy: framework
+
+logging:
+  structured:
+    format:
+      console: ecs
+

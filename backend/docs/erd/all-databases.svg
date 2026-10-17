@@ -1,0 +1,104 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1900" height="1280" viewBox="0 0 1900 1280">
+<rect width="100%" height="100%" fill="#F8FAFC"/>
+<defs><marker id="logical-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#B45309"/></marker></defs>
+<text x="70" y="54" font-family="Arial, Helvetica, sans-serif" font-size="30" font-weight="700" fill="#0F172A">Restaurant platform · modular database ERD</text>
+<text x="70" y="82" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#475569">8 physical PostgreSQL databases · 54 tables · dashed arrows are logical UUID references, not PostgreSQL foreign keys</text>
+<path d="M 480 272.5 H 612.5 V 200 H 745" fill="none" stroke="#D97706" stroke-width="1.6" stroke-dasharray="7 6" marker-end="url(#logical-arrow)" opacity="0.75"/>
+<path d="M 480 272.5 H 612.5 V 621.5 H 745" fill="none" stroke="#D97706" stroke-width="1.6" stroke-dasharray="7 6" marker-end="url(#logical-arrow)" opacity="0.75"/>
+<path d="M 70 272.5 H 275 V 559.5 H 480" fill="none" stroke="#D97706" stroke-width="1.6" stroke-dasharray="7 6" marker-end="url(#logical-arrow)" opacity="0.75"/>
+<path d="M 70 272.5 H 275 V 919.5 H 480" fill="none" stroke="#D97706" stroke-width="1.6" stroke-dasharray="7 6" marker-end="url(#logical-arrow)" opacity="0.75"/>
+<path d="M 745 200 H 950 V 621.5 H 1155" fill="none" stroke="#D97706" stroke-width="1.6" stroke-dasharray="7 6" marker-end="url(#logical-arrow)" opacity="0.75"/>
+<path d="M 1155 200 H 1287.5 V 472 H 1420" fill="none" stroke="#D97706" stroke-width="1.6" stroke-dasharray="7 6" marker-end="url(#logical-arrow)" opacity="0.75"/>
+<path d="M 745 200 H 612.5 V 919.5 H 480" fill="none" stroke="#D97706" stroke-width="1.6" stroke-dasharray="7 6" marker-end="url(#logical-arrow)" opacity="0.75"/>
+<path d="M 1155 621.5 H 1287.5 V 472 H 1420" fill="none" stroke="#D97706" stroke-width="1.6" stroke-dasharray="7 6" marker-end="url(#logical-arrow)" opacity="0.75"/>
+<path d="M 745 621.5 H 612.5 V 919.5 H 480" fill="none" stroke="#D97706" stroke-width="1.6" stroke-dasharray="7 6" marker-end="url(#logical-arrow)" opacity="0.75"/>
+<path d="M 1155 200 H 1287.5 V 909 H 1420" fill="none" stroke="#D97706" stroke-width="1.6" stroke-dasharray="7 6" marker-end="url(#logical-arrow)" opacity="0.75"/>
+<path d="M 1155 621.5 H 1287.5 V 909 H 1420" fill="none" stroke="#D97706" stroke-width="1.6" stroke-dasharray="7 6" marker-end="url(#logical-arrow)" opacity="0.75"/>
+<rect x="70" y="120" width="410" height="305" rx="10" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1.5"/>
+<path d="M 80 120 H 470 Q 480 120 480 130 V 170 H 70 V 130 Q 70 120 80 120" fill="#DCEBFF"/>
+<text x="86" y="151" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700" fill="#245EA8">identity_db</text>
+<text x="464" y="151" text-anchor="end" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#245EA8">11 tables</text>
+<text x="86" y="191" font-family="Menlo, Consolas, monospace" font-size="13" fill="#334155">users</text>
+<text x="86" y="212" font-family="Menlo, Consolas, monospace" font-size="13" fill="#334155">platform_roles</text>
+<text x="86" y="233" font-family="Menlo, Consolas, monospace" font-size="13" fill="#334155">platform_permissions</text>
+<text x="86" y="254" font-family="Menlo, Consolas, monospace" font-size="13" fill="#334155">devices</text>
+<text x="86" y="275" font-family="Menlo, Consolas, monospace" font-size="13" fill="#334155">sessions</text>
+<text x="86" y="296" font-family="Menlo, Consolas, monospace" font-size="13" fill="#334155">user_platform_roles</text>
+<text x="86" y="317" font-family="Menlo, Consolas, monospace" font-size="13" fill="#334155">platform_role_permissions</text>
+<text x="86" y="338" font-family="Menlo, Consolas, monospace" font-size="13" fill="#334155">contact_verification_tokens</text>
+<text x="86" y="359" font-family="Menlo, Consolas, monospace" font-size="13" fill="#334155">password_reset_tokens</text>
+<text x="86" y="380" font-family="Menlo, Consolas, monospace" font-size="13" fill="#334155">outbox_events</text>
+<text x="86" y="401" font-family="Menlo, Consolas, monospace" font-size="13" fill="#334155">inbox_messages</text>
+<rect x="745" y="100" width="410" height="200" rx="10" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1.5"/>
+<path d="M 755 100 H 1145 Q 1155 100 1155 110 V 150 H 745 V 110 Q 745 100 755 100" fill="#FFE4DE"/>
+<text x="761" y="131" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700" fill="#A43D2C">restaurant_db</text>
+<text x="1139" y="131" text-anchor="end" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#A43D2C">6 tables</text>
+<text x="761" y="171" font-family="Menlo, Consolas, monospace" font-size="13" fill="#334155">restaurants</text>
+<text x="761" y="192" font-family="Menlo, Consolas, monospace" font-size="13" fill="#334155">halls</text>
+<text x="761" y="213" font-family="Menlo, Consolas, monospace" font-size="13" fill="#334155">dining_tables</text>
+<text x="761" y="234" font-family="Menlo, Consolas, monospace" font-size="13" fill="#334155">table_status_history</text>
+<text x="761" y="255" font-family="Menlo, Consolas, monospace" font-size="13" fill="#334155">outbox_events</text>
+<text x="761" y="276" font-family="Menlo, Consolas, monospace" font-size="13" fill="#334155">inbox_messages</text>
+<rect x="745" y="490" width="410" height="263" rx="10" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1.5"/>
+<path d="M 755 490 H 1145 Q 1155 490 1155 500 V 540 H 745 V 500 Q 745 490 755 490" fill="#DDF5F3"/>
+<text x="761" y="521" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700" fill="#176B65">workforce_db</text>
+<text x="1139" y="521" text-anchor="end" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#176B65">9 tables</text>
+<text x="761" y="561" font-family="Menlo, Consolas, monospace" font-size="13" fill="#334155">restaurant_roles</text>
+<text x="761" y="582" font-family="Menlo, Consolas, monospace" font-size="13" fill="#334155">permissions</text>
+<text x="761" y="603" font-family="Menlo, Consolas, monospace" font-size="13" fill="#334155">restaurant_members</text>
+<text x="761" y="624" font-family="Menlo, Consolas, monospace" font-size="13" fill="#334155">restaurant_role_permissions</text>
+<text x="761" y="645" font-family="Menlo, Consolas, monospace" font-size="13" fill="#334155">member_permission_overrides</text>
+<text x="761" y="666" font-family="Menlo, Consolas, monospace" font-size="13" fill="#334155">member_permission_history</text>
+<text x="761" y="687" font-family="Menlo, Consolas, monospace" font-size="13" fill="#334155">invitations</text>
+<text x="761" y="708" font-family="Menlo, Consolas, monospace" font-size="13" fill="#334155">outbox_events</text>
+<text x="761" y="729" font-family="Menlo, Consolas, monospace" font-size="13" fill="#334155">inbox_messages</text>
+<rect x="1420" y="330" width="410" height="284" rx="10" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1.5"/>
+<path d="M 1430 330 H 1820 Q 1830 330 1830 340 V 380 H 1420 V 340 Q 1420 330 1430 330" fill="#E9E1FA"/>
+<text x="1436" y="361" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700" fill="#6543A5">operations_db</text>
+<text x="1814" y="361" text-anchor="end" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#6543A5">10 tables</text>
+<text x="1436" y="401" font-family="Menlo, Consolas, monospace" font-size="13" fill="#334155">shifts</text>
+<text x="1436" y="422" font-family="Menlo, Consolas, monospace" font-size="13" fill="#334155">shift_participants</text>
+<text x="1436" y="443" font-family="Menlo, Consolas, monospace" font-size="13" fill="#334155">task_templates</text>
+<text x="1436" y="464" font-family="Menlo, Consolas, monospace" font-size="13" fill="#334155">tasks</text>
+<text x="1436" y="485" font-family="Menlo, Consolas, monospace" font-size="13" fill="#334155">task_history</text>
+<text x="1436" y="506" font-family="Menlo, Consolas, monospace" font-size="13" fill="#334155">shift_task_resolutions</text>
+<text x="1436" y="527" font-family="Menlo, Consolas, monospace" font-size="13" fill="#334155">shift_reports</text>
+<text x="1436" y="548" font-family="Menlo, Consolas, monospace" font-size="13" fill="#334155">favorite_task_templates</text>
+<text x="1436" y="569" font-family="Menlo, Consolas, monospace" font-size="13" fill="#334155">outbox_events</text>
+<text x="1436" y="590" font-family="Menlo, Consolas, monospace" font-size="13" fill="#334155">inbox_messages</text>
+<rect x="70" y="830" width="410" height="179" rx="10" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1.5"/>
+<path d="M 80 830 H 470 Q 480 830 480 840 V 880 H 70 V 840 Q 70 830 80 830" fill="#FFF0CF"/>
+<text x="86" y="861" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700" fill="#8D6210">billing_db</text>
+<text x="464" y="861" text-anchor="end" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#8D6210">5 tables</text>
+<text x="86" y="901" font-family="Menlo, Consolas, monospace" font-size="13" fill="#334155">tariff_plans</text>
+<text x="86" y="922" font-family="Menlo, Consolas, monospace" font-size="13" fill="#334155">subscriptions</text>
+<text x="86" y="943" font-family="Menlo, Consolas, monospace" font-size="13" fill="#334155">subscription_events</text>
+<text x="86" y="964" font-family="Menlo, Consolas, monospace" font-size="13" fill="#334155">outbox_events</text>
+<text x="86" y="985" font-family="Menlo, Consolas, monospace" font-size="13" fill="#334155">inbox_messages</text>
+<rect x="70" y="470" width="410" height="179" rx="10" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1.5"/>
+<path d="M 80 470 H 470 Q 480 470 480 480 V 520 H 70 V 480 Q 70 470 80 470" fill="#DDF1FF"/>
+<text x="86" y="501" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700" fill="#23658C">notification_db</text>
+<text x="464" y="501" text-anchor="end" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#23658C">5 tables</text>
+<text x="86" y="541" font-family="Menlo, Consolas, monospace" font-size="13" fill="#334155">notifications</text>
+<text x="86" y="562" font-family="Menlo, Consolas, monospace" font-size="13" fill="#334155">push_registrations</text>
+<text x="86" y="583" font-family="Menlo, Consolas, monospace" font-size="13" fill="#334155">delivery_attempts</text>
+<text x="86" y="604" font-family="Menlo, Consolas, monospace" font-size="13" fill="#334155">outbox_events</text>
+<text x="86" y="625" font-family="Menlo, Consolas, monospace" font-size="13" fill="#334155">inbox_messages</text>
+<rect x="745" y="900" width="410" height="158" rx="10" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1.5"/>
+<path d="M 755 900 H 1145 Q 1155 900 1155 910 V 950 H 745 V 910 Q 745 900 755 900" fill="#FADDE8"/>
+<text x="761" y="931" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700" fill="#8D3156">audit_db</text>
+<text x="1139" y="931" text-anchor="end" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#8D3156">4 tables</text>
+<text x="761" y="971" font-family="Menlo, Consolas, monospace" font-size="13" fill="#334155">activity_logs</text>
+<text x="761" y="992" font-family="Menlo, Consolas, monospace" font-size="13" fill="#334155">audit_logs</text>
+<text x="761" y="1013" font-family="Menlo, Consolas, monospace" font-size="13" fill="#334155">system_events</text>
+<text x="761" y="1034" font-family="Menlo, Consolas, monospace" font-size="13" fill="#334155">inbox_messages</text>
+<rect x="1420" y="830" width="410" height="158" rx="10" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1.5"/>
+<path d="M 1430 830 H 1820 Q 1830 830 1830 840 V 880 H 1420 V 840 Q 1420 830 1430 830" fill="#DFF2DA"/>
+<text x="1436" y="861" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700" fill="#397A2C">reporting_db</text>
+<text x="1814" y="861" text-anchor="end" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#397A2C">4 tables</text>
+<text x="1436" y="901" font-family="Menlo, Consolas, monospace" font-size="13" fill="#334155">restaurant_daily_metrics</text>
+<text x="1436" y="922" font-family="Menlo, Consolas, monospace" font-size="13" fill="#334155">employee_daily_metrics</text>
+<text x="1436" y="943" font-family="Menlo, Consolas, monospace" font-size="13" fill="#334155">table_daily_metrics</text>
+<text x="1436" y="964" font-family="Menlo, Consolas, monospace" font-size="13" fill="#334155">inbox_messages</text>
+<text x="70" y="1254" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#64748B">Audit and reporting consume events and retain denormalized identifiers; their domain tables intentionally have no cross-database foreign keys.</text>
+</svg>

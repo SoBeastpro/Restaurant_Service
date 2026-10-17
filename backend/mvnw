@@ -1,0 +1,33 @@
+#!/bin/sh
+
+set -eu
+
+MVNW_PROJECT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+MVNW_PROPERTIES="$MVNW_PROJECT_DIR/.mvn/wrapper/maven-wrapper.properties"
+MVNW_DISTRIBUTION_URL=$(sed -n 's/^distributionUrl=//p' "$MVNW_PROPERTIES")
+MVNW_ARCHIVE_NAME=${MVNW_DISTRIBUTION_URL##*/}
+MVNW_DISTRIBUTION_NAME=${MVNW_ARCHIVE_NAME%-bin.zip}
+MVNW_CACHE_ROOT="${MAVEN_USER_HOME:-$HOME/.m2}/wrapper/dists/$MVNW_DISTRIBUTION_NAME"
+MVNW_MAVEN_BIN="$MVNW_CACHE_ROOT/$MVNW_DISTRIBUTION_NAME/bin/mvn"
+
+if [ ! -x "$MVNW_MAVEN_BIN" ]; then
+    command -v curl >/dev/null 2>&1 || {
+        echo "curl is required to download Maven" >&2
+        exit 1
+    }
+    command -v unzip >/dev/null 2>&1 || {
+        echo "unzip is required to install Maven" >&2
+        exit 1
+    }
+
+    MVNW_TEMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/restaurant-mvnw.XXXXXX")
+    trap 'rm -rf "$MVNW_TEMP_DIR"' EXIT INT TERM
+    echo "Downloading Maven from $MVNW_DISTRIBUTION_URL" >&2
+    curl --fail --location --silent --show-error "$MVNW_DISTRIBUTION_URL" \
+        --output "$MVNW_TEMP_DIR/$MVNW_ARCHIVE_NAME"
+    unzip -q "$MVNW_TEMP_DIR/$MVNW_ARCHIVE_NAME" -d "$MVNW_TEMP_DIR"
+    mkdir -p "$MVNW_CACHE_ROOT"
+    mv "$MVNW_TEMP_DIR/$MVNW_DISTRIBUTION_NAME" "$MVNW_CACHE_ROOT/"
+fi
+
+exec "$MVNW_MAVEN_BIN" -f "$MVNW_PROJECT_DIR/pom.xml" "$@"

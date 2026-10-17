@@ -1,0 +1,266 @@
+name: restaurant-local
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: platform_admin
+      POSTGRES_PASSWORD: platform_admin
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-15432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./infrastructure/postgres/init:/docker-entrypoint-initdb.d:ro
+      - ./infrastructure/postgres/dev-seed:/opt/restaurant/dev-seed:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U platform_admin -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  redis:
+    image: redis:8-alpine
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-16379}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:4-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: rest
+      RABBITMQ_DEFAULT_PASS: rest
+    ports:
+      - "127.0.0.1:${RABBITMQ_PORT:-15673}:5672"
+      - "127.0.0.1:${RABBITMQ_MANAGEMENT_PORT:-15674}:15672"
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  identity-service:
+    profiles: [app]
+    build:
+      context: .
+      args: { SERVICE: identity-service }
+    environment:
+      SERVER_PORT: 8080
+      SPRING_PROFILES_ACTIVE: local
+      DATABASE_URL: jdbc:postgresql://postgres:5432/identity_db
+      DATABASE_USERNAME: identity_app
+      DATABASE_PASSWORD: identity
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      JWT_ISSUER: https://identity.restaurant.internal
+      JWT_AUDIENCE: restaurant-api
+    ports: ["127.0.0.1:8081:8080"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+
+  restaurant-service:
+    profiles: [app]
+    build:
+      context: .
+      args: { SERVICE: restaurant-service }
+    environment:
+      SERVER_PORT: 8080
+      SPRING_PROFILES_ACTIVE: local
+      DATABASE_URL: jdbc:postgresql://postgres:5432/restaurant_db
+      DATABASE_USERNAME: restaurant_app
+      DATABASE_PASSWORD: restaurant
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      JWT_JWK_SET_URI: http://identity-service:8080/.well-known/jwks.json
+      JWT_ISSUER: https://identity.restaurant.internal
+      JWT_AUDIENCE: restaurant-api
+      IDENTITY_SERVICE_URL: http://identity-service:8080
+      WORKFORCE_SERVICE_URL: http://workforce-service:8080
+      OPERATIONS_SERVICE_URL: http://operations-service:8080
+      NOTIFICATION_SERVICE_URL: http://notification-service:8080
+    ports: ["127.0.0.1:8082:8080"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+      identity-service: { condition: service_started }
+      workforce-service: { condition: service_started }
+
+  workforce-service:
+    profiles: [app]
+    build:
+      context: .
+      args: { SERVICE: workforce-service }
+    environment:
+      SERVER_PORT: 8080
+      SPRING_PROFILES_ACTIVE: local
+      DATABASE_URL: jdbc:postgresql://postgres:5432/workforce_db
+      DATABASE_USERNAME: workforce_app
+      DATABASE_PASSWORD: workforce
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      JWT_JWK_SET_URI: http://identity-service:8080/.well-known/jwks.json
+      JWT_ISSUER: https://identity.restaurant.internal
+      JWT_AUDIENCE: restaurant-api
+      IDENTITY_SERVICE_URL: http://identity-service:8080
+    ports: ["127.0.0.1:8083:8080"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+      identity-service: { condition: service_started }
+
+  operations-service:
+    profiles: [app]
+    build:
+      context: .
+      args: { SERVICE: operations-service }
+    environment:
+      SERVER_PORT: 8080
+      SPRING_PROFILES_ACTIVE: local
+      DATABASE_URL: jdbc:postgresql://postgres:5432/operations_db
+      DATABASE_USERNAME: operations_app
+      DATABASE_PASSWORD: operations
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      JWT_JWK_SET_URI: http://identity-service:8080/.well-known/jwks.json
+      JWT_ISSUER: https://identity.restaurant.internal
+      JWT_AUDIENCE: restaurant-api
+      WORKFORCE_SERVICE_URL: http://workforce-service:8080
+      RESTAURANT_SERVICE_URL: http://restaurant-service:8080
+      NOTIFICATION_SERVICE_URL: http://notification-service:8080
+    ports: ["127.0.0.1:8084:8080"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+      identity-service: { condition: service_started }
+      workforce-service: { condition: service_started }
+      restaurant-service: { condition: service_started }
+      notification-service: { condition: service_started }
+
+  billing-service:
+    profiles: [app]
+    build:
+      context: .
+      args: { SERVICE: billing-service }
+    environment:
+      SERVER_PORT: 8080
+      SPRING_PROFILES_ACTIVE: local
+      DATABASE_URL: jdbc:postgresql://postgres:5432/billing_db
+      DATABASE_USERNAME: billing_app
+      DATABASE_PASSWORD: billing
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+    ports: ["127.0.0.1:8085:8080"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+
+  notification-service:
+    profiles: [app]
+    build:
+      context: .
+      args: { SERVICE: notification-service }
+    environment:
+      SERVER_PORT: 8080
+      SPRING_PROFILES_ACTIVE: local
+      DATABASE_URL: jdbc:postgresql://postgres:5432/notification_db
+      DATABASE_USERNAME: notification_app
+      DATABASE_PASSWORD: notification
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      JWT_JWK_SET_URI: http://identity-service:8080/.well-known/jwks.json
+      JWT_ISSUER: https://identity.restaurant.internal
+      JWT_AUDIENCE: restaurant-api
+    ports: ["127.0.0.1:8086:8080"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+      identity-service: { condition: service_started }
+
+  audit-service:
+    profiles: [app]
+    build:
+      context: .
+      args: { SERVICE: audit-service }
+    environment:
+      SERVER_PORT: 8080
+      SPRING_PROFILES_ACTIVE: local
+      DATABASE_URL: jdbc:postgresql://postgres:5432/audit_db
+      DATABASE_USERNAME: audit_app
+      DATABASE_PASSWORD: audit
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+    ports: ["127.0.0.1:8087:8080"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+
+  reporting-service:
+    profiles: [app]
+    build:
+      context: .
+      args: { SERVICE: reporting-service }
+    environment:
+      SERVER_PORT: 8080
+      SPRING_PROFILES_ACTIVE: local
+      DATABASE_URL: jdbc:postgresql://postgres:5432/reporting_db
+      DATABASE_USERNAME: reporting_app
+      DATABASE_PASSWORD: reporting
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+    ports: ["127.0.0.1:8088:8080"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+
+  api-gateway:
+    profiles: [app]
+    build:
+      context: .
+      args: { SERVICE: api-gateway }
+    environment:
+      SERVER_PORT: 8080
+      SPRING_PROFILES_ACTIVE: local
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      JWT_JWK_SET_URI: http://identity-service:8080/.well-known/jwks.json
+      JWT_ISSUER: https://identity.restaurant.internal
+      JWT_AUDIENCE: restaurant-api
+      IDENTITY_SERVICE_URL: http://identity-service:8080
+      RESTAURANT_SERVICE_URL: http://restaurant-service:8080
+      RESTAURANT_WEBSOCKET_URL: ws://restaurant-service:8080
+      WORKFORCE_SERVICE_URL: http://workforce-service:8080
+      OPERATIONS_SERVICE_URL: http://operations-service:8080
+      BILLING_SERVICE_URL: http://billing-service:8080
+      NOTIFICATION_SERVICE_URL: http://notification-service:8080
+      AUDIT_SERVICE_URL: http://audit-service:8080
+      REPORTING_SERVICE_URL: http://reporting-service:8080
+    ports: ["127.0.0.1:8080:8080"]
+    depends_on:
+      redis: { condition: service_healthy }
+      identity-service: { condition: service_started }
+      restaurant-service: { condition: service_started }
+      workforce-service: { condition: service_started }
+      operations-service: { condition: service_started }
+      billing-service: { condition: service_started }
+      notification-service: { condition: service_started }
+      audit-service: { condition: service_started }
+      reporting-service: { condition: service_started }
+
+volumes:
+  postgres-data:
+    # V1 schemas were redesigned during the MVP. Keep the previous development
+    # volume intact and start new local installations on the current schema.
+    name: restaurant-local-postgres-mvp-data
+  redis-data:
+  rabbitmq-data:
