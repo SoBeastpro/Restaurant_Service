@@ -50,7 +50,7 @@ export function displayName(firstName, lastName) {
 }
 
 export function userById(state, id) {
-  return state.users.find((user) => user.id === id && !user.deletedAt) ?? null;
+  return state.users.find((user) => String(user.id) === String(id) && !user.deletedAt) ?? null;
 }
 
 export function venueOf(state, user) {
@@ -73,6 +73,7 @@ export function publish(state, user) {
     position: user.role,
     venueId: user.venueId,
     restaurantId: user.venueId,
+    membershipId: user.membershipId ?? null,
     venue: venue?.name || "Заведение",
     restaurantName: venue?.name || "Заведение",
     permissions: user.permissions,

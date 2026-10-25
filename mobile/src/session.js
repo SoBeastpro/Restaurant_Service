@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { AppState } from "react-native";
-import { api, hydrateStore, loginOnServer, logoutOnServer, subscribe } from "./api/store";
+import { api, hydrateStore, loginOnServer, logoutOnServer, restoreLiveSession, subscribe } from "./api/store";
 
 const USER_KEY = "rest.session";
 const INTRO_KEY = "rest.intro";
@@ -57,9 +57,9 @@ export function SessionProvider({ children }) {
         if (Date.now() - seenAt > IDLE_MS) {
           await AsyncStorage.removeItem(USER_KEY);
         } else {
-          const fresh = api.publishUser(parsed.id) ?? parsed;
-          setUser(fresh);
-          await persistUser(fresh, Date.now());
+          const restored = (await restoreLiveSession(parsed)) ?? api.publishUser(parsed.id) ?? parsed;
+          setUser(restored);
+          await persistUser(restored, Date.now());
         }
       }
       setReady(true);
@@ -128,22 +128,14 @@ export function SessionProvider({ children }) {
     async (loginName, password, profileType) => {
       const trimmed = loginName.trim();
       if (!trimmed || !password) {
-        return "Введите почту и пароль.";
-      }
-      const remote = await loginOnServer(trimmed, password, profileType);
-      if (remote === "bad") {
-        return "Неверная почта или пароль.";
-      }
-      if (remote === "nomatch") {
-        return "Сервер ответил, но эта учётка не из демо-зала.";
-      }
-      if (remote !== "offline") {
-        await adopt(remote);
-        return null;
+        return "Введите логин и пароль.";
       }
       try {
-        const next = api.login(trimmed, password, profileType);
-        await adopt(next);
+        const remote = await loginOnServer(trimmed, password);
+        if (remote === "bad") {
+          return "Неверный логин или пароль.";
+        }
+        await adopt(remote);
         return null;
       } catch (error) {
         return error.message;

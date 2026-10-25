@@ -1,7 +1,8 @@
-// Карта OpenAPI. Сейчас живые fetch только login и logout; остальное ждёт сервер.
+// Карта OpenAPI. Живой клиент ходит на EXPO_PUBLIC_API_URL + эти пути.
 export const API_PREFIX = "/api/v1";
 
 export const paths = {
+  register: `${API_PREFIX}/auth/register`,
   registerManager: `${API_PREFIX}/auth/register-manager`,
   login: `${API_PREFIX}/auth/login`,
   refresh: `${API_PREFIX}/auth/refresh`,
@@ -13,9 +14,11 @@ export const paths = {
   changePassword: `${API_PREFIX}/auth/password/change`,
   me: `${API_PREFIX}/me`,
   myRestaurants: `${API_PREFIX}/me/restaurants`,
+  myCurrentShift: `${API_PREFIX}/me/current-shift`,
   myNotifications: `${API_PREFIX}/me/notifications`,
   readAllNotifications: `${API_PREFIX}/me/notifications/read-all`,
   restaurants: `${API_PREFIX}/restaurants`,
+  activateSubscription: `${API_PREFIX}/onboarding/subscription/activate`,
   invitation(token) {
     return `${API_PREFIX}/invitations/${encodeURIComponent(token)}`;
   },

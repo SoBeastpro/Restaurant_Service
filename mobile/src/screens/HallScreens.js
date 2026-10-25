@@ -1,13 +1,14 @@
 import { Bell } from "phosphor-react-native";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
-import { useNavigation } from "@react-navigation/native";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { TABLE_STATUSES, canSetTableStatus, statusLabel } from "../domain/catalog";
 import { formatClock, formatDay } from "../domain/format";
 import { api, userName } from "../api/store";
 import { Choice, Metric, TableTile } from "../components/blocks";
 import { colors, radius, shadow, space, statusTint, type as font } from "../theme";
 import { useRestaurant } from "../useRestaurant";
+import { firstError, hallName as hallNameError, problemComment, seatCount, seatsLabel, tableNumber } from "../validation";
 import { BackLink, Button, Field, Lead, Screen, Title } from "../ui";
 
 function tableSpan(numbers) {
@@ -39,6 +40,11 @@ function openTaskIds(tasks) {
 export function HallScreen() {
   const navigation = useNavigation();
   const data = useRestaurant();
+  useFocusEffect(
+    useCallback(() => {
+      void api.refresh();
+    }, []),
+  );
   const [hallId, setHallId] = useState(null);
   const [hallName, setHallName] = useState("");
   const [addingHall, setAddingHall] = useState(false);
@@ -118,9 +124,14 @@ export function HallScreen() {
               <Field label="Название зала" value={hallName} onChangeText={setHallName} capitalize="sentences" error={error} />
               <Button
                 label="Создать зал"
-                onPress={() => {
+                onPress={async () => {
+                  const message = hallNameError(hallName);
+                  if (message) {
+                    setError(message);
+                    return;
+                  }
                   try {
-                    const created = api.createHall({ actorId: data.me.id, name: hallName });
+                    const created = await api.createHall({ actorId: data.me.id, name: hallName });
                     setHallId(created.hallId);
                     setHallName("");
                     setAddingHall(false);
@@ -153,12 +164,28 @@ export function TableEditScreen({ route, navigation }) {
       footer={
         <Button
           label="Сохранить"
-          onPress={() => {
+          onPress={async () => {
+            const hallId = existing?.hallId ?? route.params.hallId;
+            const taken = (data?.allTables ?? []).some(
+              (table) =>
+                table.hallId === hallId &&
+                table.id !== existing?.id &&
+                String(table.number) === String(number).trim(),
+            );
+            const message = firstError(
+              tableNumber(number),
+              taken ? "Такой номер уже есть в этом зале." : null,
+              seatCount(seats, "число мест"),
+            );
+            if (message) {
+              setError(message);
+              return;
+            }
             try {
               if (existing) {
-                api.updateTable({ actorId: data.me.id, tableId: existing.id, number, seats });
+                await api.updateTable({ actorId: data.me.id, tableId: existing.id, number, seats });
               } else {
-                api.createTable({ actorId: data.me.id, hallId: route.params.hallId, number, seats });
+                await api.createTable({ actorId: data.me.id, hallId, number, seats });
               }
               navigation.goBack();
             } catch (caught) {
@@ -170,15 +197,17 @@ export function TableEditScreen({ route, navigation }) {
     >
       <BackLink onPress={() => navigation.goBack()} />
       <Title>{existing ? `Стол ${existing.number}` : "Новый стол"}</Title>
-      <Field label="Номер" value={number} onChangeText={setNumber} keyboard="number-pad" />
-      <Field label="Мест" value={seats} onChangeText={setSeats} keyboard="number-pad" error={error} />
+      <Field label="Номер" value={number} onChangeText={setNumber} keyboard="number-pad" maxLength={20} />
+      <Field label="Мест" value={seats} onChangeText={setSeats} keyboard="number-pad" error={error} maxLength={3} />
     </Screen>
   );
 }
 
 export function TableScreen({ route, navigation }) {
   const data = useRestaurant();
-  const table = data?.allTables.find((item) => item.id === route.params.tableId) ?? data?.tables.find((item) => item.id === route.params.tableId);
+  const table =
+    data?.allTables.find((item) => item.id === route.params.tableId) ??
+    data?.tables.find((item) => item.id === route.params.tableId);
   const [problem, setProblem] = useState(false);
   const [comment, setComment] = useState("");
   const [error, setError] = useState(null);
@@ -191,15 +220,17 @@ export function TableScreen({ route, navigation }) {
     );
   }
   const assignee = data.people.find((person) => person.id === table.assigneeId);
+  const runner = data.people.find((person) => person.id === table.runnerId);
   const allowed = TABLE_STATUSES.filter((status) => canSetTableStatus(data.me, table, status.id));
-  const waiters = data.people.filter((person) => person.role === "WAITER");
+  const waiters = data.people.filter((person) => person.role === "WAITER" || person.position === "WAITER");
+  const runners = data.people.filter((person) => person.role === "RUNNER" || person.position === "RUNNER");
 
-  function apply(status, note) {
+  async function apply(status, note) {
     try {
-      api.setTableStatus({ userId: data.me.id, tableId: table.id, status, comment: note });
-      setError(null);
+      await api.setTableStatus({ actorId: data.me.id, tableId: table.id, status, comment: note });
       setProblem(false);
       setComment("");
+      setError(null);
     } catch (caught) {
       setError(caught.message);
     }
@@ -213,12 +244,12 @@ export function TableScreen({ route, navigation }) {
         <View style={styles.flex}>
           <Title>Стол {table.number}</Title>
           <Lead>
-            {statusLabel(table.status)}, {table.seats} мест
+            {statusLabel(table.status)}, {seatsLabel(table.seats)}
           </Lead>
         </View>
       </View>
-      <Text style={styles.line}>{assignee ? `Закреплён: ${assignee.fullName}` : "Официант не закреплён"}</Text>
-      {table.problem ? <Text style={styles.line}>Проблема: {table.problem}</Text> : null}
+      <Text style={styles.line}>{assignee ? `Официант: ${assignee.fullName}` : "Официант не закреплён"}</Text>
+      <Text style={styles.line}>{runner ? `Раннер: ${runner.fullName}` : "Раннер не закреплён"}</Text>
       {error ? <Text style={styles.error}>{error}</Text> : null}
       <View style={styles.wrap}>
         {allowed.map((status) => (
@@ -243,24 +274,45 @@ export function TableScreen({ route, navigation }) {
       {data.me.role === "MANAGER" ? (
         <View style={styles.stack}>
           <Text style={styles.section}>Закрепить</Text>
+          <Lead>Сотрудник должен принять приглашение. На смене каждый стол нужен и официанту, и раннеру.</Lead>
+          <Text style={styles.line}>Официанты</Text>
           <View style={styles.wrap}>
             {waiters.map((person) => (
-              <Pressable
+              <AssignChip
                 key={person.id}
-                accessibilityRole="button"
-                accessibilityState={{ selected: table.assigneeId === person.id }}
-                onPress={() => api.assignTable({ actorId: data.me.id, tableId: table.id, assigneeId: person.id })}
-                style={[styles.statusBtn, table.assigneeId === person.id ? styles.selected : null]}
-              >
-                <Text style={styles.statusText}>{person.fullName}</Text>
-              </Pressable>
+                person={person}
+                selected={table.assigneeId === person.id}
+                onPress={async () => {
+                  try {
+                    await api.assignTable({ actorId: data.me.id, tableId: table.id, assigneeId: person.id });
+                    setError(null);
+                  } catch (caught) {
+                    setError(caught.message);
+                  }
+                }}
+              />
             ))}
           </View>
-          <Button tone="ghost" label="Номер и места" onPress={() => navigation.navigate("TableEdit", { tableId: table.id, hallId: table.hallId })} />
+          <Text style={styles.line}>Раннеры</Text>
+          <View style={styles.wrap}>
+            {runners.map((person) => (
+              <AssignChip
+                key={person.id}
+                person={person}
+                selected={table.runnerId === person.id}
+                onPress={async () => {
+                  try {
+                    await api.assignTable({ actorId: data.me.id, tableId: table.id, assigneeId: person.id });
+                    setError(null);
+                  } catch (caught) {
+                    setError(caught.message);
+                  }
+                }}
+              />
+            ))}
+          </View>
+          {!waiters.length && !runners.length ? <Lead>Пока нет сотрудников, которые приняли приглашение.</Lead> : null}
         </View>
-      ) : null}
-      {data.me.role === "MANAGER" || data.me.role === "WAITER" ? (
-        <Button label="Задача по столу" onPress={() => navigation.navigate("TaskForm", { tableId: table.id })} />
       ) : null}
       <Button tone="ghost" label="История стола" onPress={() => navigation.navigate("History", { tableId: table.id })} />
       <ProblemModal
@@ -272,9 +324,31 @@ export function TableScreen({ route, navigation }) {
           setProblem(false);
           setError(null);
         }}
-        onSave={() => apply("PROBLEM", comment)}
+        onSave={() => {
+          const message = problemComment(comment);
+          if (message) {
+            setError(message);
+            return;
+          }
+          apply("PROBLEM", comment);
+        }}
       />
     </Screen>
+  );
+}
+
+function AssignChip({ person, selected, onPress }) {
+  const invited = person.status === "INVITED" || Boolean(person.invitationToken);
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ selected, disabled: invited }}
+      accessibilityLabel={invited ? `${person.fullName}, приглашение не принято` : person.fullName}
+      onPress={invited ? undefined : onPress}
+      style={[styles.statusBtn, selected ? styles.selected : null, invited ? styles.invited : null]}
+    >
+      <Text style={styles.statusText}>{person.fullName}</Text>
+    </Pressable>
   );
 }
 
@@ -377,6 +451,7 @@ const styles = StyleSheet.create({
   section: { fontFamily: font.bold, fontSize: 16, color: colors.ink },
   pressed: { transform: [{ translateX: 1 }, { translateY: 1 }] },
   scrim: { flex: 1, backgroundColor: "rgba(20,20,20,0.45)", justifyContent: "flex-end", padding: 16 },
+  invited: { opacity: 0.45 },
   sheet: {
     backgroundColor: colors.paper,
     borderRadius: radius.row,

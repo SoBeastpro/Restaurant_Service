@@ -107,7 +107,7 @@ function LoggedOut({ seenIntro, finishIntro }) {
 
 function SetupNavigator({ step }) {
   return (
-    <SetupStack.Navigator key={step} initialRouteName={setupName[step] ?? "Confirm"} screenOptions={{ headerShown: false }}>
+    <SetupStack.Navigator key={step} initialRouteName={setupName[step] ?? "Venue"} screenOptions={{ headerShown: false }}>
       <SetupStack.Screen name="Confirm" component={ConfirmEmailScreen} />
       <SetupStack.Screen name="Pay" component={PaymentScreen} />
       <SetupStack.Screen name="Venue" component={VenueScreen} />

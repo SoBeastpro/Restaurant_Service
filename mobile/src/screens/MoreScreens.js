@@ -7,6 +7,7 @@ import { useSession } from "../session";
 import { Avatar, Choice, Panel } from "../components/blocks";
 import { colors, radius, shadow, space, type as font } from "../theme";
 import { useRestaurant } from "../useRestaurant";
+import { firstError, passwordValue } from "../validation";
 import { BackLink, Button, Field, Lead, Screen, Title } from "../ui";
 
 export function MoreScreen({ navigation }) {
@@ -26,12 +27,12 @@ export function MoreScreen({ navigation }) {
           {data.shift ? (
             <Button
               label="Завершить смену"
-              onPress={() => {
+              onPress={async () => {
                 if (manager) {
                   navigation.navigate("ShiftClose");
                   return;
                 }
-                api.leaveShift(data.me.id);
+                await api.leaveShift(data.me.id);
                 void signOut();
               }}
             />
@@ -80,13 +81,13 @@ export function NotificationsScreen({ navigation }) {
       <BackLink onPress={() => navigation.goBack()} />
       <Title>Уведомления</Title>
       {data.notifications.some((item) => !item.read) ? (
-        <Button tone="ghost" label="Прочитать все" onPress={() => api.markAllNotificationsRead(data.me.id)} />
+        <Button tone="ghost" label="Прочитать все" onPress={() => void api.markAllNotificationsRead(data.me.id)} />
       ) : null}
       {data.notifications.map((item) => (
         <Pressable
           key={item.id}
           accessibilityRole="button"
-          onPress={() => api.markNotificationRead({ userId: data.me.id, notificationId: item.id })}
+          onPress={() => void api.markNotificationRead({ userId: data.me.id, notificationId: item.id })}
           style={styles.row}
         >
           <Text style={styles.name}>{item.title}</Text>
@@ -158,9 +159,9 @@ export function PasswordScreen({ navigation }) {
       footer={
         <Button
           label="Сохранить"
-          onPress={() => {
+          onPress={async () => {
             try {
-              api.changePassword({ userId: data.me.id, currentPassword: current, newPassword: password });
+              await api.changePassword({ userId: data.me.id, currentPassword: current, newPassword: password });
               setDone(true);
               setError(null);
             } catch (caught) {

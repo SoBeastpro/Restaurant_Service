@@ -2,7 +2,9 @@ import { clone, fail, notify, ok, take, userById } from "./core.js";
 import { todayKey } from "./format.js";
 
 export function openShiftOf(state, venueId) {
-  return state.shifts.find((shift) => shift.venueId === venueId && shift.status === "ACTIVE") ?? null;
+  return (
+    state.shifts.find((shift) => String(shift.venueId) === String(venueId) && shift.status === "ACTIVE") ?? null
+  );
 }
 
 export function openShift(state, { actorId, start, end, memberIds }) {

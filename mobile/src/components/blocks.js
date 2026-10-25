@@ -1,10 +1,12 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { statusLabel, taskStatusLabel } from "../domain/catalog";
+import { seatsLabel } from "../validation";
 import { colors, radius, shadow, statusTint, taskTint, type as font } from "../theme";
 
 export function TableTile({ table, onPress, hasTask = false }) {
   const label = statusLabel(table.status);
-  const spoken = hasTask ? `Стол ${table.number}, ${label}, есть задача` : `Стол ${table.number}, ${label}`;
+  const seats = seatsLabel(table.seats);
+  const spoken = hasTask ? `Стол ${table.number}, ${label}, ${seats}, есть задача` : `Стол ${table.number}, ${label}, ${seats}`;
   return (
     <Pressable
       accessibilityRole="button"
@@ -15,6 +17,7 @@ export function TableTile({ table, onPress, hasTask = false }) {
       <View style={[styles.swatch, { backgroundColor: statusTint[table.status] }]} />
       <Text style={styles.number}>{table.number}</Text>
       <Text style={styles.caption}>{label}</Text>
+      <Text style={styles.caption}>{seats}</Text>
       {hasTask ? <Text style={styles.taskFlag}>Задача</Text> : null}
     </Pressable>
   );

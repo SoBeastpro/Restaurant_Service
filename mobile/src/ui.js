@@ -32,6 +32,7 @@ export function Field({
   capitalize = "none",
   multiline = false,
   placeholder,
+  maxLength,
 }) {
   const [focused, setFocused] = useState(false);
   return (
@@ -47,6 +48,7 @@ export function Field({
         accessibilityLabel={label}
         multiline={multiline}
         placeholder={placeholder}
+        maxLength={maxLength}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
         placeholderTextColor={colors.faint}

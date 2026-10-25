@@ -8,6 +8,7 @@ import { canMoveTask } from "../domain/engine";
 import { Choice, Panel, TaskRow } from "../components/blocks";
 import { colors, radius, shadow, type as font } from "../theme";
 import { useRestaurant } from "../useRestaurant";
+import { firstError, taskTitle } from "../validation";
 import { BackLink, Button, Field, Lead, Screen, Title } from "../ui";
 
 export function TasksScreen({ navigation }) {
@@ -64,9 +65,9 @@ export function TaskDetailScreen({ route, navigation }) {
   }
   const actor = data.me;
 
-  function move(status) {
+  async function move(status) {
     try {
-      api.moveTask({ actorId: actor.id, taskId: task.id, status });
+      await api.moveTask({ actorId: actor.id, taskId: task.id, status });
       setError(null);
     } catch (caught) {
       setError(caught.message);
@@ -112,9 +113,17 @@ export function TaskFormScreen({ route, navigation }) {
       footer={
         <Button
           label="Создать"
-          onPress={() => {
+          onPress={async () => {
+            const message = firstError(
+              taskTitle(title),
+              assigneeId ? null : "Выберите исполнителя. Задачу можно создать только на смене.",
+            );
+            if (message) {
+              setError(message);
+              return;
+            }
             try {
-              api.createTask({
+              await api.createTask({
                 actorId: data.me.id,
                 title,
                 description,
@@ -133,8 +142,8 @@ export function TaskFormScreen({ route, navigation }) {
     >
       <BackLink onPress={() => navigation.goBack()} />
       <Title>Создание задачи</Title>
-      <Field label="Что сделать" value={title} onChangeText={setTitle} capitalize="sentences" />
-      <Field label="Описание" value={description} onChangeText={setDescription} capitalize="sentences" multiline />
+      <Field label="Что сделать" value={title} onChangeText={setTitle} capitalize="sentences" maxLength={200} />
+      <Field label="Описание" value={description} onChangeText={setDescription} capitalize="sentences" multiline maxLength={200} />
       <Text style={styles.section}>Кому</Text>
       <View style={styles.wrap}>
         <Choice label="Позже" selected={assigneeId == null} onPress={() => setAssigneeId(null)} />
@@ -195,9 +204,9 @@ export function FavoritesScreen({ navigation }) {
           <Text style={styles.cardTitle}>{item.title}</Text>
           <Button
             label="Создать задачу"
-            onPress={() => {
+            onPress={async () => {
               try {
-                api.createTaskFromFavorite({ actorId: data.me.id, favoriteId: item.id, assigneeId });
+                await api.createTaskFromFavorite({ actorId: data.me.id, favoriteId: item.id, assigneeId });
                 navigation.goBack();
               } catch (caught) {
                 setError(caught.message);
@@ -207,9 +216,9 @@ export function FavoritesScreen({ navigation }) {
           <Button
             tone="ghost"
             label="Убрать шаблон"
-            onPress={() => {
+            onPress={async () => {
               try {
-                api.deleteFavorite({ actorId: data.me.id, favoriteId: item.id });
+                await api.deleteFavorite({ actorId: data.me.id, favoriteId: item.id });
               } catch (caught) {
                 setError(caught.message);
               }

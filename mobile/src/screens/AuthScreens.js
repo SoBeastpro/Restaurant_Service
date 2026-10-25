@@ -5,8 +5,23 @@ import { STAFF_ROLES } from "../domain/catalog";
 import { api } from "../api/store";
 import { Avatar, Choice, Panel } from "../components/blocks";
 import { useSession } from "../session";
-import { colors, radius, type as font } from "../theme";
+import { colors, type as font } from "../theme";
 import { useRestaurant } from "../useRestaurant";
+import {
+  emailLogin,
+  firstError,
+  hallName,
+  hoursRange,
+  inviteToken,
+  loginValue,
+  passwordMatch,
+  passwordValue,
+  personName,
+  seatCount,
+  tableCount,
+  venueAddress,
+  venueName,
+} from "../validation";
 import { BackLink, Button, Field, Lead, Screen, Step, Title } from "../ui";
 
 export function RegisterScreen({ navigation }) {
@@ -16,45 +31,73 @@ export function RegisterScreen({ navigation }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [repeat, setRepeat] = useState("");
+  const [name, setName] = useState("");
+  const [address, setAddress] = useState("");
+  const [hours, setHours] = useState("12:00-23:00");
   const [error, setError] = useState(null);
+  const [busy, setBusy] = useState(false);
 
   return (
     <Screen
       scroll
       footer={
         <Button
-          label="Продолжить"
-          onPress={() => {
-            if (password !== repeat) {
-              setError("Пароли не совпадают.");
+          label={busy ? "Создаём" : "Продолжить"}
+          disabled={busy}
+          onPress={async () => {
+            const message = firstError(
+              personName(firstName, "имя"),
+              personName(lastName, "фамилию"),
+              emailLogin(email),
+              passwordValue(password),
+              passwordMatch(password, repeat),
+              venueName(name),
+              venueAddress(address),
+              hoursRange(hours),
+            );
+            if (message) {
+              setError(message);
               return;
             }
+            setBusy(true);
             try {
-              const result = api.registerManager({ firstName, lastName, email, password });
-              void adopt(result.user);
+              const result = await api.registerManager({
+                firstName,
+                lastName,
+                email,
+                password,
+                name,
+                address,
+                hours,
+              });
+              await adopt(result.user ?? result);
             } catch (caught) {
               setError(caught.message);
+            } finally {
+              setBusy(false);
             }
           }}
         />
       }
     >
       <BackLink onPress={() => navigation.goBack()} />
-      <Step>1 из 5</Step>
+      <Step>1 из 2</Step>
       <Title>Создание ресторана</Title>
-      <Lead>Имя, фамилия, почта и пароль от 8 символов.</Lead>
-      <Field label="Имя" value={firstName} onChangeText={setFirstName} capitalize="words" />
-      <Field label="Фамилия" value={lastName} onChangeText={setLastName} capitalize="words" />
-      <Field label="Почта" value={email} onChangeText={setEmail} keyboard="email-address" />
-      <Field label="Пароль" value={password} onChangeText={setPassword} secure />
-      <Field label="Повтор пароля" value={repeat} onChangeText={setRepeat} secure error={error} />
+      <Lead>Аккаунт директора и данные заведения. Пароль от 8 символов.</Lead>
+      <Field label="Имя" value={firstName} onChangeText={setFirstName} capitalize="words" maxLength={100} />
+      <Field label="Фамилия" value={lastName} onChangeText={setLastName} capitalize="words" maxLength={100} />
+      <Field label="Почта" value={email} onChangeText={setEmail} keyboard="email-address" maxLength={100} />
+      <Field label="Пароль" value={password} onChangeText={setPassword} secure maxLength={72} />
+      <Field label="Повтор пароля" value={repeat} onChangeText={setRepeat} secure maxLength={72} />
+      <Field label="Название ресторана" value={name} onChangeText={setName} capitalize="words" maxLength={200} />
+      <Field label="Адрес" value={address} onChangeText={setAddress} capitalize="sentences" maxLength={500} />
+      <Field label="Часы работы" value={hours} onChangeText={setHours} error={error} />
     </Screen>
   );
 }
 
 export function ConfirmEmailScreen() {
   const { user } = useSession();
-  const data = useRestaurant();
   const [code, setCode] = useState("");
   const [error, setError] = useState(null);
   return (
@@ -62,9 +105,9 @@ export function ConfirmEmailScreen() {
       footer={
         <Button
           label="Подтвердить"
-          onPress={() => {
+          onPress={async () => {
             try {
-              api.confirmEmail(user.id, code);
+              await api.confirmEmail(user.id, code);
             } catch (caught) {
               setError(caught.message);
             }
@@ -74,7 +117,7 @@ export function ConfirmEmailScreen() {
     >
       <Step>Почта</Step>
       <Title>Подтверждение</Title>
-      <Lead>Письмо никуда не уходит. Токен для этого прототипа: {data?.confirmCode}</Lead>
+      <Lead>Подтверждение почты выполняется на сервере.</Lead>
       <Field label="Токен" value={code} onChangeText={setCode} error={error} />
     </Screen>
   );
@@ -83,14 +126,14 @@ export function ConfirmEmailScreen() {
 export function PaymentScreen() {
   const { user } = useSession();
   return (
-    <Screen footer={<Button label="Пропустить оплату" onPress={() => api.confirmPayment(user.id)} />}>
+    <Screen footer={<Button label="Пропустить оплату" onPress={() => void api.confirmPayment(user.id)} />}>
       <Title>Подписка</Title>
       <Panel>
         <Text style={styles.name}>Смена REST</Text>
         <Text style={styles.meta}>1 ресторан, безлимит сотрудников</Text>
         <Text style={styles.soon}>скоро</Text>
       </Panel>
-      <Lead>Оплата в этом прототипе не списывается.</Lead>
+      <Lead>Локально подписка активируется без оплаты.</Lead>
     </Screen>
   );
 }
@@ -107,9 +150,14 @@ export function VenueScreen() {
       footer={
         <Button
           label="Дальше"
-          onPress={() => {
+          onPress={async () => {
+            const message = firstError(venueName(name), venueAddress(address), hoursRange(hours));
+            if (message) {
+              setError(message);
+              return;
+            }
             try {
-              api.saveVenue(user.id, { name, address, about: "", hours });
+              await api.saveVenue(user.id, { name, address, about: "", hours });
             } catch (caught) {
               setError(caught.message);
             }
@@ -117,53 +165,88 @@ export function VenueScreen() {
         />
       }
     >
-      <Step>2 из 5</Step>
+      <Step>Заведение</Step>
       <Title>Профиль заведения</Title>
-      <Field label="Название" value={name} onChangeText={setName} capitalize="words" />
-      <Field label="Адрес" value={address} onChangeText={setAddress} capitalize="sentences" />
+      <Field label="Название" value={name} onChangeText={setName} capitalize="words" maxLength={200} />
+      <Field label="Адрес" value={address} onChangeText={setAddress} capitalize="sentences" maxLength={500} />
       <Field label="Часы работы" value={hours} onChangeText={setHours} error={error} />
     </Screen>
   );
 }
 
+function resizeSeatList(current, rawCount) {
+  const count = Math.min(12, Math.max(0, Number.parseInt(String(rawCount).trim(), 10) || 0));
+  const next = current.slice(0, count);
+  const fallback = current[current.length - 1] || "4";
+  while (next.length < count) {
+    next.push(fallback);
+  }
+  return next;
+}
+
 export function FirstHallScreen() {
   const { user } = useSession();
   const [name, setName] = useState("Основной");
-  const [tableCount, setTableCount] = useState("6");
-  const [seats, setSeats] = useState("4");
+  const [count, setCount] = useState("6");
+  const [seats, setSeats] = useState(() => Array.from({ length: 6 }, () => "4"));
   const [error, setError] = useState(null);
-  const preview = Math.min(12, Math.max(0, Number(tableCount) || 0));
+  const [busy, setBusy] = useState(false);
+
   return (
     <Screen
       scroll
       footer={
         <Button
-          label="Сохранить зал"
-          onPress={() => {
+          label={busy ? "Сохраняем" : "Сохранить зал"}
+          disabled={busy}
+          onPress={async () => {
+            const seatErrors = seats.map((value, index) => seatCount(value, `мест у стола ${index + 1}`));
+            const message = firstError(hallName(name), tableCount(count), ...seatErrors);
+            if (message) {
+              setError(message);
+              return;
+            }
+            setBusy(true);
             try {
-              api.saveFirstHall(user.id, { name, seats, tableCount });
+              await api.saveFirstHall(user.id, {
+                name,
+                tables: seats.map((value, index) => ({ number: index + 1, seats: Number(value) })),
+              });
             } catch (caught) {
               setError(caught.message);
+            } finally {
+              setBusy(false);
             }
           }}
         />
       }
     >
-      <Step>3 из 5</Step>
+      <Step>2 из 2</Step>
       <Title>Первый зал</Title>
-      <Field label="Название зала" value={name} onChangeText={setName} capitalize="sentences" />
-      <Field label="Столов" value={tableCount} onChangeText={setTableCount} keyboard="number-pad" />
-      <Field label="Мест за столом" value={seats} onChangeText={setSeats} keyboard="number-pad" error={error} />
-      {preview > 0 ? (
-        <View style={styles.wrap}>
-          {Array.from({ length: preview }, (_, index) => (
-            <View key={index} style={styles.preview}>
-              <Text style={styles.chipText}>{index + 1}</Text>
-              <Text style={styles.meta}>{seats || "0"} мест</Text>
-            </View>
-          ))}
-        </View>
-      ) : null}
+      <Lead>У каждого стола своё число мест, от 1 до 100.</Lead>
+      <Field label="Название зала" value={name} onChangeText={setName} capitalize="sentences" maxLength={100} />
+      <Field
+        label="Столов"
+        value={count}
+        onChangeText={(value) => {
+          setCount(value);
+          setSeats((current) => resizeSeatList(current, value));
+        }}
+        keyboard="number-pad"
+      />
+      {seats.map((value, index) => (
+        <Field
+          key={index}
+          label={`Стол ${index + 1}, мест`}
+          value={value}
+          onChangeText={(next) => {
+            setSeats((current) => current.map((seatsValue, seatIndex) => (seatIndex === index ? next : seatsValue)));
+          }}
+          keyboard="number-pad"
+          error={index === seats.length - 1 ? error : null}
+        />
+      ))}
+      {!seats.length ? <Lead>Укажите число столов от 1 до 12.</Lead> : null}
     </Screen>
   );
 }
@@ -179,13 +262,13 @@ export function StaffSetupScreen() {
   return (
     <Screen
       scroll
-      footer={<Button label="Дальше" onPress={() => api.finishStaffStep(user.id)} />}
+      footer={<Button label="Дальше" onPress={() => void api.finishStaffStep(user.id)} />}
     >
       <Step>4 из 5</Step>
       <Title>Сотрудники</Title>
       <Lead>Должность задаёт права. Имя и фамилию сотрудник подтвердит ссылкой приглашения.</Lead>
-      <Field label="Имя" value={firstName} onChangeText={setFirstName} capitalize="words" />
-      <Field label="Фамилия" value={lastName} onChangeText={setLastName} capitalize="words" />
+      <Field label="Имя" value={firstName} onChangeText={setFirstName} capitalize="words" maxLength={100} />
+      <Field label="Фамилия" value={lastName} onChangeText={setLastName} capitalize="words" maxLength={100} />
       <View style={styles.wrap}>
         {STAFF_ROLES.map((item) => (
           <Choice key={item.id} label={item.label} selected={position === item.id} onPress={() => setPosition(item.id)} />
@@ -195,9 +278,14 @@ export function StaffSetupScreen() {
       <Button
         tone="ghost"
         label="Добавить"
-        onPress={() => {
+        onPress={async () => {
+          const message = firstError(personName(firstName, "имя"), personName(lastName, "фамилию"));
+          if (message) {
+            setError(message);
+            return;
+          }
           try {
-            api.createStaff({ actorId: user.id, firstName, lastName, position });
+            await api.createStaff({ actorId: user.id, firstName, lastName, position });
             setFirstName("");
             setLastName("");
             setError(null);
@@ -232,7 +320,7 @@ export function InviteScreen({ navigation, route }) {
     <Screen
       scroll
       footer={
-        setup ? <Button label="Готово" onPress={() => api.finishSetup(user.id)} /> : null
+        setup ? <Button label="Готово" onPress={() => void api.finishSetup(user.id)} /> : null
       }
     >
       {!setup && navigation?.canGoBack() ? <BackLink onPress={() => navigation.goBack()} /> : null}
@@ -241,8 +329,8 @@ export function InviteScreen({ navigation, route }) {
       <Lead>Ссылка и QR создаются сразу. Сотрудник задаёт логин и пароль по этой ссылке.</Lead>
       {!setup ? (
         <>
-          <Field label="Имя" value={firstName} onChangeText={setFirstName} capitalize="words" />
-          <Field label="Фамилия" value={lastName} onChangeText={setLastName} capitalize="words" />
+          <Field label="Имя" value={firstName} onChangeText={setFirstName} capitalize="words" maxLength={100} />
+          <Field label="Фамилия" value={lastName} onChangeText={setLastName} capitalize="words" maxLength={100} />
           <View style={styles.wrap}>
             {STAFF_ROLES.map((item) => (
               <Choice key={item.id} label={item.label} selected={position === item.id} onPress={() => setPosition(item.id)} />
@@ -252,9 +340,14 @@ export function InviteScreen({ navigation, route }) {
           <Button
             tone="ghost"
             label="Добавить"
-            onPress={() => {
+            onPress={async () => {
+              const message = firstError(personName(firstName, "имя"), personName(lastName, "фамилию"));
+              if (message) {
+                setError(message);
+                return;
+              }
               try {
-                api.createStaff({ actorId: user.id, firstName, lastName, position });
+                await api.createStaff({ actorId: user.id, firstName, lastName, position });
                 setFirstName("");
                 setLastName("");
                 setError(null);
@@ -300,13 +393,29 @@ export function JoinScreen({ navigation }) {
       scroll
       footer={
         step === "token" ? (
-          <Button label="Дальше" onPress={() => setStep("account")} />
+          <Button
+            label="Дальше"
+            onPress={() => {
+              const message = inviteToken(token);
+              if (message) {
+                setError(message);
+                return;
+              }
+              setError(null);
+              setStep("account");
+            }}
+          />
         ) : (
           <Button
             label="Войти в зал"
-            onPress={() => {
+            onPress={async () => {
+              const message = firstError(loginValue(login), passwordValue(password));
+              if (message) {
+                setError(message);
+                return;
+              }
               try {
-                const next = api.redeemInvite({ token, login, password });
+                const next = await api.redeemInvite({ token, login, password });
                 void adopt(next);
               } catch (caught) {
                 setError(caught.message);
@@ -321,13 +430,13 @@ export function JoinScreen({ navigation }) {
       {step === "token" ? (
         <>
           <Lead>Вставьте токен из ссылки. Регистр важен.</Lead>
-          <Field label="Токен приглашения" value={token} onChangeText={setToken} error={error} />
+          <Field label="Токен приглашения" value={token} onChangeText={setToken} error={error} maxLength={200} />
         </>
       ) : (
         <>
           <Lead>Логин задаётся один раз, пароль от 8 символов.</Lead>
-          <Field label="Логин" value={login} onChangeText={setLogin} />
-          <Field label="Пароль" value={password} onChangeText={setPassword} secure error={error} />
+          <Field label="Логин" value={login} onChangeText={setLogin} maxLength={100} />
+          <Field label="Пароль" value={password} onChangeText={setPassword} secure error={error} maxLength={72} />
         </>
       )}
     </Screen>
@@ -348,9 +457,14 @@ export function ResetPasswordScreen({ navigation, route }) {
       footer={
         <Button
           label="Задать пароль"
-          onPress={() => {
+          onPress={async () => {
+            const message = firstError(inviteToken(token), passwordValue(password, "новый пароль"));
+            if (message) {
+              setError(message);
+              return;
+            }
             try {
-              api.resetPassword({ token, newPassword: password });
+              await api.resetPassword({ token, newPassword: password });
               setDone(true);
               setError(null);
             } catch (caught) {
@@ -362,14 +476,19 @@ export function ResetPasswordScreen({ navigation, route }) {
     >
       <BackLink onPress={() => navigation.goBack()} />
       <Title>Новый пароль</Title>
-      <Lead>Письмо с устройства не уходит. Сначала запросите токен, затем задайте пароль от 8 символов.</Lead>
+      <Lead>Сброс пароля выполняется только через сервер.</Lead>
       <Field label="Почта или логин" value={login} onChangeText={setLogin} />
       <Button
         tone="ghost"
         label="Получить токен"
-        onPress={() => {
+        onPress={async () => {
+          const message = loginValue(login, "почту или логин");
+          if (message) {
+            setError(message);
+            return;
+          }
           try {
-            const result = api.forgotPassword({ login });
+            const result = await api.forgotPassword({ login });
             setAsked(true);
             setIssued(result.token);
             if (result.token) {
@@ -383,8 +502,8 @@ export function ResetPasswordScreen({ navigation, route }) {
       />
       {asked && issued ? <Lead>Токен восстановления: {issued}</Lead> : null}
       {asked && !issued ? <Lead>Для этой учётки токен не выдан.</Lead> : null}
-      <Field label="Токен" value={token} onChangeText={setToken} />
-      <Field label="Новый пароль" value={password} onChangeText={setPassword} secure error={error} />
+      <Field label="Токен" value={token} onChangeText={setToken} maxLength={200} />
+      <Field label="Новый пароль" value={password} onChangeText={setPassword} secure error={error} maxLength={72} />
       {done ? <Lead>Пароль обновлён. Можно входить.</Lead> : null}
     </Screen>
   );
@@ -392,7 +511,6 @@ export function ResetPasswordScreen({ navigation, route }) {
 
 const styles = StyleSheet.create({
   wrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  chipText: { fontFamily: font.bold, color: colors.ink },
   error: { fontFamily: font.regular, color: colors.danger, fontSize: 14 },
   meta: { fontFamily: font.regular, fontSize: 14, color: colors.ink },
   name: { fontFamily: font.semibold, fontSize: 16, color: colors.ink },
@@ -412,15 +530,4 @@ const styles = StyleSheet.create({
   },
   personRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   flex: { flex: 1 },
-  preview: {
-    minWidth: 72,
-    minHeight: 56,
-    borderRadius: radius.row,
-    borderWidth: 2,
-    borderColor: colors.ink,
-    backgroundColor: colors.white,
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 6,
-  },
 });

@@ -245,17 +245,14 @@ services:
       NOTIFICATION_SERVICE_URL: http://notification-service:8080
       AUDIT_SERVICE_URL: http://audit-service:8080
       REPORTING_SERVICE_URL: http://reporting-service:8080
-    ports: ["127.0.0.1:8080:8080"]
+    ports: ["127.0.0.1:18080:8080"]
     depends_on:
       redis: { condition: service_healthy }
       identity-service: { condition: service_started }
       restaurant-service: { condition: service_started }
       workforce-service: { condition: service_started }
       operations-service: { condition: service_started }
-      billing-service: { condition: service_started }
       notification-service: { condition: service_started }
-      audit-service: { condition: service_started }
-      reporting-service: { condition: service_started }
 
 volumes:
   postgres-data:

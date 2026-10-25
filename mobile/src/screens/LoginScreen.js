@@ -1,9 +1,8 @@
 import { useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text } from "react-native";
 import { useNavigation, useRoute } from "@react-navigation/native";
-import { DEMO_STAFF } from "../demo";
 import { useSession } from "../session";
-import { colors, space, type as font } from "../theme";
+import { colors, type as font } from "../theme";
 import { BackLink, Button, Field, Screen } from "../ui";
 
 export function LoginScreen() {
@@ -11,12 +10,11 @@ export function LoginScreen() {
   const route = useRoute();
   const { signIn } = useSession();
   const intent = route.params?.intent ?? "staff";
-  const [login, setLogin] = useState(intent === "manager" ? "irina@gosti.bar" : "");
+  const manager = intent === "manager";
+  const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
-  const manager = intent === "manager";
-  const hints = DEMO_STAFF.filter((person) => (manager ? person.role === "MANAGER" : person.role !== "MANAGER"));
 
   return (
     <Screen
@@ -52,19 +50,12 @@ export function LoginScreen() {
         value={login}
         onChangeText={setLogin}
         keyboard={manager ? "email-address" : "default"}
+        maxLength={100}
       />
-      <Field label="Пароль" value={password} onChangeText={setPassword} secure error={error} />
+      <Field label="Пароль" value={password} onChangeText={setPassword} secure error={error} maxLength={72} />
       <Pressable accessibilityRole="button" onPress={() => navigation.navigate("Reset", { email: login })}>
         <Text style={styles.link}>Забыли пароль?</Text>
       </Pressable>
-      <View style={styles.hint}>
-        <Text style={styles.hintTitle}>Демо, пароль smena</Text>
-        {hints.map((person) => (
-          <Pressable key={person.id} onPress={() => setLogin(manager ? person.email : person.username)}>
-            <Text style={styles.hintLine}>{manager ? person.email : person.username}</Text>
-          </Pressable>
-        ))}
-      </View>
     </Screen>
   );
 }
@@ -80,7 +71,4 @@ const styles = StyleSheet.create({
   },
   lead: { fontFamily: font.regular, fontSize: 16, lineHeight: 22, color: colors.mute },
   link: { fontFamily: font.bold, fontSize: 14, color: colors.ink, paddingVertical: 8, minHeight: 48 },
-  hint: { marginTop: space.sm, gap: 4 },
-  hintTitle: { fontFamily: font.semibold, fontSize: 13, color: colors.mute },
-  hintLine: { fontFamily: font.regular, fontSize: 14, color: colors.ink, paddingVertical: 6 },
 });

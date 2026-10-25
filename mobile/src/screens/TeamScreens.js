@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useFocusEffect } from "@react-navigation/native";
 import { useSession } from "../session";
 import { STAFF_ROLES, TABLE_STATUSES, permissionsFor, roleLabel, roleLine, shiftStatusLabel } from "../domain/catalog";
 import { formatDay, todayKey } from "../domain/format";
@@ -7,6 +8,7 @@ import { api } from "../api/store";
 import { Avatar, Choice, Panel } from "../components/blocks";
 import { colors, space, type as font } from "../theme";
 import { useRestaurant } from "../useRestaurant";
+import { clockTime, firstError, planItem } from "../validation";
 import { BackLink, Button, Field, Lead, Screen, Title } from "../ui";
 
 export function TeamScreen({ navigation }) {
@@ -28,7 +30,7 @@ export function TeamScreen({ navigation }) {
       )}
       <Button tone="ghost" label="Пригласить" onPress={() => navigation.navigate("Invite")} />
       {people.map((person) => {
-        const onShift = data.onShift.includes(person.id);
+        const onShift = data.onShift.some((id) => String(id) === String(person.id));
         return (
           <Pressable
             key={person.id}
@@ -53,6 +55,11 @@ export function TeamScreen({ navigation }) {
 
 export function ShiftBoardScreen({ navigation }) {
   const data = useRestaurant();
+  useFocusEffect(
+    useCallback(() => {
+      void api.refresh();
+    }, []),
+  );
   if (!data) {
     return null;
   }
@@ -69,7 +76,7 @@ export function ShiftBoardScreen({ navigation }) {
       )}
       {data.shift ? <Button tone="ghost" label="Закрыть смену" onPress={() => navigation.navigate("ShiftClose")} /> : null}
       {people.map((person) => {
-        const onShift = data.onShift.includes(person.id);
+        const onShift = data.onShift.some((id) => String(id) === String(person.id));
         return (
           <Pressable
             key={person.id}
@@ -111,9 +118,9 @@ export function PersonScreen({ route, navigation }) {
   const shifts = data.shifts.filter((shift) => data.attendance.some((row) => row.shiftId === shift.id && row.userId === person.id));
   const tasks = data.allTasks.filter((task) => task.assigneeId === person.id && task.status !== "COMPLETED" && task.status !== "CANCELLED");
 
-  function save(role) {
+  async function save(role) {
     try {
-      api.updateStaff({
+      await api.updateStaff({
         actorId: data.me.id,
         userId: person.id,
         fullName: person.fullName,
@@ -164,7 +171,7 @@ export function PersonScreen({ route, navigation }) {
                   onPress={() => {
                     const current = person.permissions?.tableStatuses ?? [];
                     const tableStatuses = selected ? current.filter((id) => id !== status.id) : [...current, status.id];
-                    api.updateStaff({
+                    void api.updateStaff({
                       actorId: data.me.id,
                       userId: person.id,
                       fullName: person.fullName,
@@ -183,14 +190,14 @@ export function PersonScreen({ route, navigation }) {
           <Button
             tone="ghost"
             label={person.status === "BLOCKED" ? "Разблокировать" : "Заблокировать"}
-            onPress={() => api.blockStaff({ actorId: data.me.id, userId: person.id, blocked: person.status !== "BLOCKED" })}
+            onPress={() => void api.blockStaff({ actorId: data.me.id, userId: person.id, blocked: person.status !== "BLOCKED" })}
           />
           <Button
             tone="danger"
             label="Убрать из зала"
-            onPress={() => {
+            onPress={async () => {
               try {
-                api.deleteStaff({ actorId: data.me.id, userId: person.id });
+                await api.deleteStaff({ actorId: data.me.id, userId: person.id });
                 navigation.goBack();
               } catch (caught) {
                 setError(caught.message);
@@ -212,7 +219,7 @@ export function ShiftOpenScreen({ navigation }) {
   if (!data) {
     return null;
   }
-  const staff = data.people.filter((person) => person.status === "ACTIVE");
+  const staff = data.people.filter((person) => person.status === "ACTIVE" && person.role !== "MANAGER");
 
   function toggle(id) {
     setPicked((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));
@@ -224,12 +231,12 @@ export function ShiftOpenScreen({ navigation }) {
       footer={
         <Button
           label={data.shift ? "Сохранить состав" : "Начать смену"}
-          onPress={() => {
+          onPress={async () => {
             try {
               if (data.shift) {
-                api.setShiftMembers({ actorId: data.me.id, shiftId: data.shift.id, memberIds: picked });
+                await api.setShiftMembers({ actorId: data.me.id, shiftId: data.shift.id, memberIds: picked });
               } else {
-                api.openShift({ actorId: data.me.id, start, end, memberIds: picked });
+                await api.openShift({ actorId: data.me.id, start, end, memberIds: picked });
               }
               navigation.goBack();
             } catch (caught) {
@@ -241,6 +248,7 @@ export function ShiftOpenScreen({ navigation }) {
     >
       <BackLink onPress={() => navigation.goBack()} />
       <Title>{data.shift ? "Кто на смене" : "Открыть смену"}</Title>
+      <Lead>В смену берут только тех, кто принял приглашение. Каждый стол закрепите за официантом и раннером.</Lead>
       {!data.shift ? (
         <>
           <Field label="Начало" value={start} onChangeText={setStart} placeholder="12:00" />
@@ -251,23 +259,45 @@ export function ShiftOpenScreen({ navigation }) {
           {data.shift.start}-{data.shift.end}
         </Lead>
       )}
+      {error ? <Text style={styles.error}>{error}</Text> : null}
       {staff.map((person) => {
-        const on = picked.includes(person.id);
+        const on = picked.some((id) => String(id) === String(person.id));
         return (
-          <Pressable
-            key={person.id}
-            accessibilityRole="checkbox"
-            accessibilityState={{ checked: on }}
-            onPress={() => toggle(person.id)}
-          >
-            <Panel style={on ? styles.cardOn : null}>
+          <Panel key={person.id} style={on ? styles.cardOn : null}>
+            <Pressable
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: on }}
+              onPress={() => toggle(person.id)}
+            >
               <Text style={styles.name}>{person.fullName}</Text>
-              <Text style={styles.meta}>{roleLabel(person.role)}</Text>
-            </Panel>
-          </Pressable>
+              <Text style={styles.meta}>
+                {roleLabel(person.role === "RUNNER" || person.position === "RUNNER" ? "RUNNER" : person.role)}
+              </Text>
+            </Pressable>
+            {on ? (
+              <View style={styles.wrap}>
+                {data.allTables.map((table) => {
+                  const taken =
+                    (person.position === "RUNNER" || person.role === "RUNNER" ? table.runnerId : table.assigneeId) ===
+                    person.id;
+                  return (
+                    <Choice
+                      key={table.id}
+                      label={`Стол ${table.number}`}
+                      selected={taken}
+                      onPress={() => {
+                        void api.assignTable({ actorId: data.me.id, tableId: table.id, assigneeId: person.id }).catch((caught) => {
+                          setError(caught.message);
+                        });
+                      }}
+                    />
+                  );
+                })}
+              </View>
+            ) : null}
+          </Panel>
         );
       })}
-      {error ? <Text style={styles.error}>{error}</Text> : null}
     </Screen>
   );
 }
@@ -287,13 +317,13 @@ export function ShiftCloseScreen({ navigation }) {
       footer={
         <Button
           label="Закрыть смену"
-          onPress={() => {
+          onPress={async () => {
             try {
-              const result = api.closeShift({
+              const result = await api.closeShift({
                 actorId: data.me.id,
                 unfinishedTasks: open.map((task) => ({ taskId: task.id, action: choices[task.id] ?? "CARRY_OVER" })),
               });
-              navigation.replace("ShiftReport", { report: result.report });
+              navigation.replace("ShiftReport", { report: result?.report ?? result ?? {} });
             } catch (caught) {
               setError(caught.message);
             }

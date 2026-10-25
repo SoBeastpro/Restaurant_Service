@@ -29,13 +29,32 @@ export function buildView(state, sessionUser) {
   }
   const fresh = userById(state, sessionUser.id);
   const me = fresh ? publish(state, fresh) : sessionUser;
-  const halls = state.halls.filter((hall) => hall.venueId === me.venueId && !hall.deletedAt);
+  const halls = state.halls.filter((hall) => String(hall.venueId) === String(me.venueId) && !hall.deletedAt);
   const people = state.users
-    .filter((user) => user.venueId === me.venueId && !user.deletedAt)
+    .filter((user) => String(user.venueId) === String(me.venueId) && !user.deletedAt)
     .map((user) => publish(state, user));
   const shift = openShiftOf(state, me.venueId);
+  const asUserId = (value) => {
+    const id = value == null ? "" : String(value);
+    if (!id) {
+      return "";
+    }
+    const match = state.users.find((user) => String(user.id) === id || String(user.membershipId ?? "") === id);
+    return match ? String(match.id) : id;
+  };
   const onShift = shift
-    ? state.attendance.filter((row) => row.shiftId === shift.id && row.present).map((row) => row.userId)
+    ? Array.from(
+        new Set(
+          [
+            ...state.attendance
+              .filter((row) => String(row.shiftId) === String(shift.id) && row.present !== false)
+              .map((row) => row.userId),
+            ...(shift.memberIds ?? []),
+          ]
+            .map(asUserId)
+            .filter(Boolean),
+        ),
+      )
     : [];
   const tasks = visibleTasks(state, me);
   const allTasks = state.tasks.filter((item) => item.venueId === me.venueId && !item.deletedAt);
