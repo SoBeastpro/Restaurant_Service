@@ -1,0 +1,100 @@
+spring:
+  application:
+    name: api-gateway
+  profiles:
+    default: local
+  webflux:
+    problemdetails:
+      enabled: true
+  cloud:
+    gateway:
+      server:
+        webflux:
+          httpclient:
+            connect-timeout: 2000
+            response-timeout: 5s
+          routes:
+            - id: restaurant-realtime
+              uri: ${services.restaurant.ws-url}
+              predicates: ["Path=/api/v1/ws"]
+            - id: identity-auth
+              uri: ${services.identity.url}
+              predicates: ["Path=/api/v1/auth/**"]
+            - id: identity-onboarding
+              uri: ${services.identity.url}
+              predicates: ["Path=/api/v1/onboarding/**"]
+            - id: notification-self
+              uri: ${services.notification.url}
+              predicates: ["Path=/api/v1/me/notifications/**,/api/v1/me/devices/**"]
+            - id: workforce-self-restaurants
+              uri: ${services.workforce.url}
+              predicates: ["Path=/api/v1/me/restaurants"]
+            - id: operations-self-shift
+              uri: ${services.operations.url}
+              predicates: ["Path=/api/v1/me/current-shift"]
+            - id: identity-profile
+              uri: ${services.identity.url}
+              predicates: ["Path=/api/v1/me,/api/v1/me/avatar,/api/v1/me/permissions"]
+            - id: workforce-invitations-public
+              uri: ${services.workforce.url}
+              predicates: ["Path=/api/v1/invitations/**"]
+            - id: reporting
+              uri: ${services.reporting.url}
+              predicates: ["Path=/api/v1/restaurants/*/statistics/**,/api/v1/restaurants/*/employees/*/statistics"]
+            - id: audit
+              uri: ${services.audit.url}
+              predicates: ["Path=/api/v1/restaurants/*/audit-log,/api/v1/platform/audit-log,/api/v1/platform/system-events"]
+            - id: billing
+              uri: ${services.billing.url}
+              predicates: ["Path=/api/v1/restaurants/*/subscription/**,/api/v1/platform/subscriptions"]
+            - id: operations
+              uri: ${services.operations.url}
+              predicates: ["Path=/api/v1/restaurants/*/shifts/**,/api/v1/restaurants/*/tasks/**,/api/v1/restaurants/*/task-templates/**"]
+            - id: workforce
+              uri: ${services.workforce.url}
+              predicates: ["Path=/api/v1/restaurants/*/employees/**,/api/v1/restaurants/*/invitations/**"]
+            - id: restaurant-resources
+              uri: ${services.restaurant.url}
+              predicates: ["Path=/api/v1/restaurants,/api/v1/restaurants/*,/api/v1/restaurants/*/logo,/api/v1/restaurants/*/halls/**,/api/v1/restaurants/*/tables/**"]
+            - id: platform-restaurants
+              uri: ${services.restaurant.url}
+              predicates: ["Path=/api/v1/platform/restaurants/**"]
+            - id: platform-users
+              uri: ${services.identity.url}
+              predicates: ["Path=/api/v1/platform/users/**"]
+
+server:
+  port: ${SERVER_PORT:8080}
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,gateway,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+    gateway:
+      access: read-only
+
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    path: /swagger-ui.html
+    url: /openapi/openapi.yaml
+    disable-swagger-default-url: true
+    operations-sorter: method
+
+info:
+  app:
+    name: ${spring.application.name}
+    version: 0.2.0
+
+logging:
+  pattern:
+    level: "%5p [service:${spring.application.name}] [requestId:%X{requestId:-}]"
+

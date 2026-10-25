@@ -1,0 +1,28 @@
+spring:
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 1
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: http://127.0.0.1:9/jwks
+          issuer-uri: https://identity.restaurant.internal
+          audiences: [restaurant-api]
+
+services:
+  identity: { url: "http://127.0.0.1:9" }
+  restaurant: { url: "http://127.0.0.1:9", ws-url: "ws://127.0.0.1:9" }
+  workforce: { url: "http://127.0.0.1:9" }
+  operations: { url: "http://127.0.0.1:9" }
+  billing: { url: "http://127.0.0.1:9" }
+  notification: { url: "http://127.0.0.1:9" }
+  audit: { url: "http://127.0.0.1:9" }
+  reporting: { url: "http://127.0.0.1:9" }
+
+management:
+  endpoint:
+    health:
+      show-details: always
+

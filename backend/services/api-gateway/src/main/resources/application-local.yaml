@@ -1,0 +1,37 @@
+spring:
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:16379}
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: ${JWT_JWK_SET_URI:http://localhost:8081/.well-known/jwks.json}
+          issuer-uri: ${JWT_ISSUER:https://identity.restaurant.internal}
+          audiences: ["${JWT_AUDIENCE:restaurant-api}"]
+
+services:
+  identity:
+    url: ${IDENTITY_SERVICE_URL:http://localhost:8081}
+  restaurant:
+    url: ${RESTAURANT_SERVICE_URL:http://localhost:8082}
+    ws-url: ${RESTAURANT_WEBSOCKET_URL:ws://localhost:8082}
+  workforce:
+    url: ${WORKFORCE_SERVICE_URL:http://localhost:8083}
+  operations:
+    url: ${OPERATIONS_SERVICE_URL:http://localhost:8084}
+  billing:
+    url: ${BILLING_SERVICE_URL:http://localhost:8085}
+  notification:
+    url: ${NOTIFICATION_SERVICE_URL:http://localhost:8086}
+  audit:
+    url: ${AUDIT_SERVICE_URL:http://localhost:8087}
+  reporting:
+    url: ${REPORTING_SERVICE_URL:http://localhost:8088}
+
+management:
+  endpoint:
+    health:
+      show-details: always
+

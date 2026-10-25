@@ -1,5 +1,3 @@
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
-
 CREATE TABLE restaurant_daily_metrics (
     restaurant_id UUID NOT NULL,
     metric_date DATE NOT NULL,
@@ -40,7 +38,17 @@ CREATE TABLE table_daily_metrics (
     PRIMARY KEY (restaurant_id, table_id, metric_date)
 );
 
-CREATE INDEX employee_daily_metrics_member_date_idx ON employee_daily_metrics (membership_id, metric_date DESC);
-CREATE INDEX table_daily_metrics_table_date_idx ON table_daily_metrics (table_id, metric_date DESC);
+CREATE TABLE inbox_messages (
+    message_id UUID PRIMARY KEY,
+    event_type VARCHAR(150) NOT NULL,
+    producer VARCHAR(100) NOT NULL,
+    received_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    processed_at TIMESTAMPTZ,
+    error_message VARCHAR(2000)
+);
 
-COMMENT ON TABLE restaurant_daily_metrics IS 'Eventually consistent read model populated only from domain events.';
+CREATE INDEX inbox_unprocessed_idx
+    ON inbox_messages (received_at) WHERE processed_at IS NULL;
+
+COMMENT ON TABLE restaurant_daily_metrics IS
+    'Eventually consistent read model populated only from domain events.';

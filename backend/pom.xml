@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>4.1.1</version>
+        <relativePath/>
+    </parent>
+
+    <groupId>com.restaurant</groupId>
+    <artifactId>restaurant-backend</artifactId>
+    <version>0.2.0-SNAPSHOT</version>
+    <packaging>pom</packaging>
+    <name>restaurant-backend</name>
+    <description>REST Restaurant microservices</description>
+
+    <modules>
+        <module>services/service-foundation</module>
+        <module>services/service-parent</module>
+        <module>services/api-gateway</module>
+        <module>services/identity-service</module>
+        <module>services/restaurant-service</module>
+        <module>services/workforce-service</module>
+        <module>services/operations-service</module>
+        <module>services/billing-service</module>
+        <module>services/notification-service</module>
+        <module>services/audit-service</module>
+        <module>services/reporting-service</module>
+        <module>tests/database-schema-tests</module>
+        <module>tests/architecture-tests</module>
+    </modules>
+
+    <properties>
+        <java.version>25</java.version>
+        <spring-cloud.version>2025.1.3</spring-cloud.version>
+        <springdoc.version>3.1.0</springdoc.version>
+        <archunit.version>1.5.1</archunit.version>
+    </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.springframework.cloud</groupId>
+                <artifactId>spring-cloud-dependencies</artifactId>
+                <version>${spring-cloud.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+</project>

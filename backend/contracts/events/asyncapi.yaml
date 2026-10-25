@@ -59,6 +59,10 @@ channels:
     publish:
       message:
         $ref: '#/components/messages/TaskCreated'
+  operations.task.assigned.v1:
+    publish:
+      message:
+        $ref: '#/components/messages/TaskAssigned'
   operations.task.status-changed.v1:
     publish:
       message:
@@ -173,6 +177,15 @@ components:
             properties:
               payload:
                 $ref: '#/components/schemas/TaskPayload'
+    TaskAssigned:
+      name: operations.task.assigned.v1
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/EventEnvelope'
+          - type: object
+            properties:
+              payload:
+                $ref: '#/components/schemas/TaskPayload'
     TaskStatusChanged:
       name: operations.task.status-changed.v1
       payload:
@@ -239,12 +252,16 @@ components:
         status: { type: string, enum: [INVITED, ACTIVE, INACTIVE, BLOCKED, ARCHIVED] }
     TableStatusPayload:
       type: object
-      required: [tableId, restaurantId, status]
+      required: [tableId, tableNumber, restaurantId, shiftId, changedByMembershipId, oldStatus, status]
       properties:
         tableId: { type: string, format: uuid }
+        tableNumber: { type: string }
         restaurantId: { type: string, format: uuid }
+        shiftId: { type: string, format: uuid }
         changedByMembershipId: { type: string, format: uuid }
+        oldStatus: { type: string, enum: [READY, NEEDS_CLEANING, NEEDS_SERVING, PROBLEM] }
         status: { type: string, enum: [READY, NEEDS_CLEANING, NEEDS_SERVING, PROBLEM] }
+        comment: { type: string }
     ShiftPayload:
       type: object
       required: [shiftId, restaurantId, status]
@@ -259,6 +276,7 @@ components:
         taskId: { type: string, format: uuid }
         restaurantId: { type: string, format: uuid }
         assignedToMembershipId: { type: string, format: uuid }
+        previousAssigneeMembershipId: { type: string, format: uuid }
         status: { type: string, enum: [CREATED, IN_PROGRESS, COMPLETED, CANCELLED] }
     SubscriptionPayload:
       type: object
