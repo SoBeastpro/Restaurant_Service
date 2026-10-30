@@ -15,6 +15,12 @@ import org.springframework.stereotype.Repository;
 @Repository
 public class PlatformRestaurantRepository {
 
+    public record RestaurantMetricsSummary(long total, long active, long blocked, long archived) {
+    }
+
+    public record RestaurantStatus(UUID id, String status) {
+    }
+
     private static final String SELECT = """
             SELECT r.id, r.director_user_id, r.name, r.address, r.phone, r.description,
                    r.status, r.created_at, r.updated_at,
@@ -52,6 +58,30 @@ public class PlatformRestaurantRepository {
                 .param("restaurantId", restaurantId)
                 .query(PlatformRestaurantRepository::map)
                 .optional();
+    }
+
+    public Optional<RestaurantStatus> findStatus(UUID restaurantId) {
+        return jdbc.sql("SELECT id, status FROM restaurants WHERE id = :restaurantId")
+                .param("restaurantId", restaurantId)
+                .query((result, rowNumber) -> new RestaurantStatus(
+                        result.getObject("id", UUID.class), result.getString("status")))
+                .optional();
+    }
+
+    public RestaurantMetricsSummary metricsSummary() {
+        return jdbc.sql("""
+                        SELECT COUNT(*) AS total,
+                               COUNT(*) FILTER (WHERE status = 'ACTIVE') AS active,
+                               COUNT(*) FILTER (WHERE status = 'BLOCKED') AS blocked,
+                               COUNT(*) FILTER (WHERE status = 'ARCHIVED') AS archived
+                        FROM restaurants
+                        """)
+                .query((result, rowNumber) -> new RestaurantMetricsSummary(
+                        result.getLong("total"),
+                        result.getLong("active"),
+                        result.getLong("blocked"),
+                        result.getLong("archived")))
+                .single();
     }
 
     public void updateStatus(UUID restaurantId, String status) {

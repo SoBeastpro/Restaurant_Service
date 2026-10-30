@@ -24,6 +24,9 @@ services:
   audit: { url: "${AUDIT_SERVICE_URL}" }
   reporting: { url: "${REPORTING_SERVICE_URL}" }
 
+internal:
+  api-secret: ${INTERNAL_API_SECRET}
+
 server:
   forward-headers-strategy: framework
 

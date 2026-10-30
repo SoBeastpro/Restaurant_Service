@@ -65,6 +65,7 @@ services:
       JWT_JWK_SET_URI: http://identity-service:8080/.well-known/jwks.json
       JWT_ISSUER: https://identity.restaurant.internal
       JWT_AUDIENCE: restaurant-api
+      INTERNAL_API_SECRET: ${INTERNAL_API_SECRET:-local-internal-api-key-change-me}
     ports: ["127.0.0.1:8081:8080"]
     depends_on:
       postgres: { condition: service_healthy }
@@ -90,6 +91,7 @@ services:
       WORKFORCE_SERVICE_URL: http://workforce-service:8080
       OPERATIONS_SERVICE_URL: http://operations-service:8080
       NOTIFICATION_SERVICE_URL: http://notification-service:8080
+      INTERNAL_API_SECRET: ${INTERNAL_API_SECRET:-local-internal-api-key-change-me}
     ports: ["127.0.0.1:8082:8080"]
     depends_on:
       postgres: { condition: service_healthy }
@@ -164,11 +166,14 @@ services:
       JWT_JWK_SET_URI: http://identity-service:8080/.well-known/jwks.json
       JWT_ISSUER: https://identity.restaurant.internal
       JWT_AUDIENCE: restaurant-api
+      RESTAURANT_SERVICE_URL: http://restaurant-service:8080
+      INTERNAL_API_SECRET: ${INTERNAL_API_SECRET:-local-internal-api-key-change-me}
     ports: ["127.0.0.1:8085:8080"]
     depends_on:
       postgres: { condition: service_healthy }
       rabbitmq: { condition: service_healthy }
       identity-service: { condition: service_started }
+      restaurant-service: { condition: service_started }
 
   notification-service:
     profiles: [app]
@@ -230,11 +235,17 @@ services:
       JWT_JWK_SET_URI: http://identity-service:8080/.well-known/jwks.json
       JWT_ISSUER: https://identity.restaurant.internal
       JWT_AUDIENCE: restaurant-api
+      IDENTITY_SERVICE_URL: http://identity-service:8080
+      RESTAURANT_SERVICE_URL: http://restaurant-service:8080
+      BILLING_SERVICE_URL: http://billing-service:8080
+      INTERNAL_API_SECRET: ${INTERNAL_API_SECRET:-local-internal-api-key-change-me}
     ports: ["127.0.0.1:8088:8080"]
     depends_on:
       postgres: { condition: service_healthy }
       rabbitmq: { condition: service_healthy }
       identity-service: { condition: service_started }
+      restaurant-service: { condition: service_started }
+      billing-service: { condition: service_started }
 
   api-gateway:
     profiles: [app]
@@ -258,6 +269,7 @@ services:
       NOTIFICATION_SERVICE_URL: http://notification-service:8080
       AUDIT_SERVICE_URL: http://audit-service:8080
       REPORTING_SERVICE_URL: http://reporting-service:8080
+      INTERNAL_API_SECRET: ${INTERNAL_API_SECRET:-local-internal-api-key-change-me}
     ports: ["127.0.0.1:18080:8080"]
     depends_on:
       redis: { condition: service_healthy }

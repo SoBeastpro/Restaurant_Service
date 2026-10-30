@@ -15,6 +15,9 @@ import org.springframework.stereotype.Repository;
 @Repository
 public class PlatformUserRepository {
 
+    public record UserMetricsSummary(long total, long active, long blocked, long archived) {
+    }
+
     private final JdbcClient jdbc;
 
     public PlatformUserRepository(JdbcClient jdbc) {
@@ -71,6 +74,22 @@ public class PlatformUserRepository {
                 .param("userId", userId)
                 .query(PlatformUserRepository::mapUser)
                 .optional();
+    }
+
+    public UserMetricsSummary metricsSummary() {
+        return jdbc.sql("""
+                        SELECT COUNT(*) AS total,
+                               COUNT(*) FILTER (WHERE status = 'ACTIVE') AS active,
+                               COUNT(*) FILTER (WHERE status = 'BLOCKED') AS blocked,
+                               COUNT(*) FILTER (WHERE status = 'ARCHIVED') AS archived
+                        FROM users
+                        """)
+                .query((result, rowNumber) -> new UserMetricsSummary(
+                        result.getLong("total"),
+                        result.getLong("active"),
+                        result.getLong("blocked"),
+                        result.getLong("archived")))
+                .single();
     }
 
     public boolean updateStatus(UUID userId, String status) {

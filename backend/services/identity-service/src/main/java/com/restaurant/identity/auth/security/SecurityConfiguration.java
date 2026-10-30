@@ -38,6 +38,8 @@ class SecurityConfiguration {
                                 "/internal/v1/users/invitations",
                                 "/internal/v1/users/*/restaurant")
                         .permitAll()
+                        .requestMatchers(HttpMethod.GET, "/internal/v1/platform/**")
+                        .permitAll()
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(resourceServer -> resourceServer.jwt(
                         jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter())))

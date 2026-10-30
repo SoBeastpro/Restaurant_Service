@@ -1,2 +1,3 @@
 com.restaurant.foundation.web.RequestIdAutoConfiguration
 com.restaurant.foundation.web.RestClientAutoConfiguration
+com.restaurant.foundation.messaging.OutboxAutoConfiguration

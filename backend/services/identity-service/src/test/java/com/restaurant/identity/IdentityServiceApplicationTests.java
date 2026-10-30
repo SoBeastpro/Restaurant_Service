@@ -236,6 +236,14 @@ class IdentityServiceApplicationTests {
                 .param("id", targetId)
                 .query(Long.class)
                 .single()).isEqualTo(1);
+
+        mockMvc.perform(get("/internal/v1/platform/metrics-summary"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("INTERNAL_API_KEY_INVALID"));
+        mockMvc.perform(get("/internal/v1/platform/metrics-summary")
+                        .header("X-Internal-Api-Key", "local-internal-api-key-change-me"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.blocked").value(org.hamcrest.Matchers.greaterThanOrEqualTo(1)));
     }
 
     @Test

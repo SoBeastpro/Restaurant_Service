@@ -8,7 +8,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.util.List;
 import java.util.UUID;
 
+import com.restaurant.audit.messaging.DomainEventAuditListener;
+
 import org.junit.jupiter.api.Test;
+import org.springframework.amqp.core.MessageBuilder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
@@ -32,6 +35,7 @@ class AuditServiceApplicationTests {
 
     @Autowired MockMvc mockMvc;
     @Autowired JdbcClient jdbc;
+    @Autowired DomainEventAuditListener domainEventAuditListener;
     @MockitoBean JwtDecoder jwtDecoder;
 
     @Test void contextLoads() {
@@ -65,6 +69,44 @@ class AuditServiceApplicationTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalElements").value(1))
                 .andExpect(jsonPath("$.content[0].eventType").value("PAYMENT_PROVIDER_UNAVAILABLE"));
+    }
+
+    @Test
+    void domainEventIsPersistedOnceInPlatformAudit() throws Exception {
+        UUID eventId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        String event = """
+                {
+                  "eventId":"%s",
+                  "eventType":"identity.user.status-changed.v1",
+                  "producer":"identity-service",
+                  "aggregateType":"USER",
+                  "aggregateId":"%s",
+                  "actorUserId":"%s",
+                  "correlationId":"%s",
+                  "occurredAt":"2026-10-30T12:00:00Z",
+                  "payload":{"userId":"%s","status":"BLOCKED"}
+                }
+                """.formatted(eventId, userId, actorId, eventId, userId);
+        var message = MessageBuilder.withBody(event.getBytes(java.nio.charset.StandardCharsets.UTF_8)).build();
+
+        domainEventAuditListener.consume(message);
+        domainEventAuditListener.consume(message);
+
+        mockMvc.perform(get("/api/v1/platform/audit-log")
+                        .param("actorUserId", actorId.toString())
+                        .with(systemAdmin()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].subjectUserId").value(userId.toString()))
+                .andExpect(jsonPath("$.content[0].action").value("IDENTITY_USER_STATUS_CHANGED_V1"));
+
+        mockMvc.perform(get("/api/v1/platform/system-events")
+                        .param("eventType", "identity.user.status-changed.v1")
+                        .with(systemAdmin()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1));
     }
 
     private static org.springframework.test.web.servlet.request.RequestPostProcessor systemAdmin() {

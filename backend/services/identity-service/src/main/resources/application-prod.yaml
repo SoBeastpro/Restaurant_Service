@@ -27,3 +27,6 @@ auth:
   private-key-location: ${JWT_PRIVATE_KEY_LOCATION}
   public-key-location: ${JWT_PUBLIC_KEY_LOCATION}
 
+internal:
+  api-secret: ${INTERNAL_API_SECRET}
+

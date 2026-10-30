@@ -23,3 +23,10 @@ logging:
     format:
       console: ecs
 
+internal:
+  api-secret: ${INTERNAL_API_SECRET}
+
+services:
+  restaurant:
+    url: ${RESTAURANT_SERVICE_URL}
+

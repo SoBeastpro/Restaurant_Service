@@ -2213,10 +2213,24 @@ components:
     PlatformMetrics:
       type: object
       required:
-        [from, to, restaurantsWithData, activeMembers, shiftsOpened, shiftsClosed, tasksCreated, tasksCompleted, tasksCancelled, tasksOverdue, tableStatusChanges, taskCompletionRate, daily]
+        [from, to, usersTotal, activeUsers, blockedUsers, archivedUsers, restaurantsTotal, activeRestaurants, blockedRestaurants, archivedRestaurants, subscriptionsTotal, activeSubscriptions, expiredSubscriptions, cancelledSubscriptions, activeTariffs, archivedTariffs, restaurantsWithData, activeMembers, shiftsOpened, shiftsClosed, tasksCreated, tasksCompleted, tasksCancelled, tasksOverdue, tableStatusChanges, taskCompletionRate, daily]
       properties:
         from: { type: string, format: date }
         to: { type: string, format: date }
+        usersTotal: { type: integer, format: int64, minimum: 0 }
+        activeUsers: { type: integer, format: int64, minimum: 0 }
+        blockedUsers: { type: integer, format: int64, minimum: 0 }
+        archivedUsers: { type: integer, format: int64, minimum: 0 }
+        restaurantsTotal: { type: integer, format: int64, minimum: 0 }
+        activeRestaurants: { type: integer, format: int64, minimum: 0 }
+        blockedRestaurants: { type: integer, format: int64, minimum: 0 }
+        archivedRestaurants: { type: integer, format: int64, minimum: 0 }
+        subscriptionsTotal: { type: integer, format: int64, minimum: 0 }
+        activeSubscriptions: { type: integer, format: int64, minimum: 0 }
+        expiredSubscriptions: { type: integer, format: int64, minimum: 0 }
+        cancelledSubscriptions: { type: integer, format: int64, minimum: 0 }
+        activeTariffs: { type: integer, format: int64, minimum: 0 }
+        archivedTariffs: { type: integer, format: int64, minimum: 0 }
         restaurantsWithData:
           type: integer
           format: int64

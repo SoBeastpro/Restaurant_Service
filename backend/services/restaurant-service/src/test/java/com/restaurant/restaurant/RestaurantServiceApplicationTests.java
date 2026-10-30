@@ -319,6 +319,14 @@ class RestaurantServiceApplicationTests {
                         .with(managerJwt(UUID.randomUUID(), restaurantId)))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("SYSTEM_ADMIN_REQUIRED"));
+
+        mockMvc.perform(get("/internal/v1/restaurants/{restaurantId}/status", restaurantId))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("INTERNAL_API_KEY_INVALID"));
+        mockMvc.perform(get("/internal/v1/restaurants/{restaurantId}/status", restaurantId)
+                        .header("X-Internal-Api-Key", "local-internal-api-key-change-me"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("BLOCKED"));
     }
 
     private static org.springframework.test.web.servlet.request.RequestPostProcessor employeeJwt(

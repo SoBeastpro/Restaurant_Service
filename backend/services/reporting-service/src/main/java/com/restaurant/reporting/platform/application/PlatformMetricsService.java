@@ -5,6 +5,7 @@ import java.time.LocalDate;
 import com.restaurant.foundation.web.ApiException;
 import com.restaurant.reporting.platform.api.PlatformMetricsDtos.PlatformMetricsResponse;
 import com.restaurant.reporting.platform.infrastructure.PlatformMetricsRepository;
+import com.restaurant.reporting.platform.infrastructure.PlatformSummaryClient;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -14,9 +15,11 @@ import org.springframework.transaction.annotation.Transactional;
 public class PlatformMetricsService {
 
     private final PlatformMetricsRepository repository;
+    private final PlatformSummaryClient summaryClient;
 
-    public PlatformMetricsService(PlatformMetricsRepository repository) {
+    public PlatformMetricsService(PlatformMetricsRepository repository, PlatformSummaryClient summaryClient) {
         this.repository = repository;
+        this.summaryClient = summaryClient;
     }
 
     @Transactional(readOnly = true)
@@ -29,6 +32,35 @@ public class PlatformMetricsService {
         if (resolvedFrom.plusYears(1).isBefore(resolvedTo)) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "PERIOD_TOO_LARGE", "Период метрик не может превышать один год.");
         }
-        return repository.metrics(resolvedFrom, resolvedTo);
+        PlatformMetricsResponse activity = repository.metrics(resolvedFrom, resolvedTo);
+        var summary = summaryClient.load();
+        return new PlatformMetricsResponse(
+                activity.from(),
+                activity.to(),
+                summary.users().total(),
+                summary.users().active(),
+                summary.users().blocked(),
+                summary.users().archived(),
+                summary.restaurants().total(),
+                summary.restaurants().active(),
+                summary.restaurants().blocked(),
+                summary.restaurants().archived(),
+                summary.billing().subscriptionsTotal(),
+                summary.billing().activeSubscriptions(),
+                summary.billing().expiredSubscriptions(),
+                summary.billing().cancelledSubscriptions(),
+                summary.billing().activeTariffs(),
+                summary.billing().archivedTariffs(),
+                activity.restaurantsWithData(),
+                activity.activeMembers(),
+                activity.shiftsOpened(),
+                activity.shiftsClosed(),
+                activity.tasksCreated(),
+                activity.tasksCompleted(),
+                activity.tasksCancelled(),
+                activity.tasksOverdue(),
+                activity.tableStatusChanges(),
+                activity.taskCompletionRate(),
+                activity.daily());
     }
 }

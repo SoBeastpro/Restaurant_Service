@@ -56,3 +56,7 @@ logging:
   pattern:
     level: "%5p [service:${spring.application.name}] [requestId:%X{requestId:-}]"
 
+restaurant:
+  outbox:
+    enabled: true
+

@@ -15,6 +15,7 @@ import com.restaurant.billing.platform.api.PlatformBillingDtos.SubscriptionRespo
 import com.restaurant.billing.platform.api.PlatformBillingDtos.TariffResponse;
 import com.restaurant.billing.platform.api.PlatformBillingDtos.UpdateTariffRequest;
 import com.restaurant.billing.platform.infrastructure.PlatformBillingRepository;
+import com.restaurant.billing.platform.infrastructure.RestaurantDirectoryClient;
 import com.restaurant.foundation.web.ApiException;
 import com.restaurant.foundation.web.PageResponse;
 
@@ -36,16 +37,25 @@ public class PlatformBillingService {
 
     private final PlatformBillingRepository repository;
     private final ObjectMapper objectMapper;
+    private final RestaurantDirectoryClient restaurantDirectoryClient;
     private final Clock clock;
 
     @Autowired
-    public PlatformBillingService(PlatformBillingRepository repository, ObjectMapper objectMapper) {
-        this(repository, objectMapper, Clock.systemUTC());
+    public PlatformBillingService(
+            PlatformBillingRepository repository,
+            ObjectMapper objectMapper,
+            RestaurantDirectoryClient restaurantDirectoryClient) {
+        this(repository, objectMapper, restaurantDirectoryClient, Clock.systemUTC());
     }
 
-    PlatformBillingService(PlatformBillingRepository repository, ObjectMapper objectMapper, Clock clock) {
+    PlatformBillingService(
+            PlatformBillingRepository repository,
+            ObjectMapper objectMapper,
+            RestaurantDirectoryClient restaurantDirectoryClient,
+            Clock clock) {
         this.repository = repository;
         this.objectMapper = objectMapper;
+        this.restaurantDirectoryClient = restaurantDirectoryClient;
         this.clock = clock;
     }
 
@@ -158,6 +168,7 @@ public class PlatformBillingService {
     @Transactional
     public SubscriptionResponse activate(UUID actorUserId, ActivateSubscriptionRequest request) {
         repository.expireSubscriptions();
+        restaurantDirectoryClient.requireSubscriptionTarget(request.restaurantId());
         TariffResponse tariff = requiredTariff(request.planId());
         if (!"ACTIVE".equals(tariff.status())) {
             throw conflict("TARIFF_ARCHIVED", "Нельзя активировать подписку на архивный тариф.");
@@ -184,6 +195,7 @@ public class PlatformBillingService {
         repository.insertOutbox(id, "billing.subscription.status-changed.v1", json(java.util.Map.of(
                 "subscriptionId", id.toString(),
                 "restaurantId", request.restaurantId().toString(),
+                "actorUserId", actorUserId.toString(),
                 "status", "ACTIVE",
                 "endsAt", endsAt.toString())));
         return requiredSubscription(id);
@@ -209,6 +221,7 @@ public class PlatformBillingService {
         repository.insertOutbox(subscriptionId, "billing.subscription.status-changed.v1", json(java.util.Map.of(
                 "subscriptionId", subscriptionId.toString(),
                 "restaurantId", current.restaurantId().toString(),
+                "actorUserId", actorUserId.toString(),
                 "status", "ACTIVE",
                 "endsAt", endsAt.toString())));
         return requiredSubscription(subscriptionId);
@@ -234,6 +247,7 @@ public class PlatformBillingService {
         repository.insertOutbox(subscriptionId, "billing.subscription.status-changed.v1", json(java.util.Map.of(
                 "subscriptionId", subscriptionId.toString(),
                 "restaurantId", current.restaurantId().toString(),
+                "actorUserId", actorUserId.toString(),
                 "status", "CANCELLED")));
         return requiredSubscription(subscriptionId);
     }

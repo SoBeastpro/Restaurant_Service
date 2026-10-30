@@ -95,6 +95,88 @@ public class PlatformAuditRepository {
                 .single();
     }
 
+    public boolean beginInbox(UUID eventId, String eventType, String producer) {
+        return jdbc.sql("""
+                        INSERT INTO inbox_messages (message_id, event_type, producer)
+                        VALUES (:eventId, :eventType, :producer)
+                        ON CONFLICT (message_id) DO NOTHING
+                        """)
+                .param("eventId", eventId)
+                .param("eventType", eventType)
+                .param("producer", producer)
+                .update() == 1;
+    }
+
+    public void completeInbox(UUID eventId) {
+        jdbc.sql("UPDATE inbox_messages SET processed_at = CURRENT_TIMESTAMP WHERE message_id = :eventId")
+                .param("eventId", eventId)
+                .update();
+    }
+
+    public void insertAuditEvent(
+            UUID eventId,
+            UUID actorUserId,
+            UUID subjectUserId,
+            UUID restaurantId,
+            String scope,
+            String action,
+            String entityType,
+            UUID entityId,
+            UUID correlationId,
+            String details,
+            Instant createdAt) {
+        jdbc.sql("""
+                        INSERT INTO audit_logs (
+                            event_id, actor_user_id, subject_user_id, restaurant_id,
+                            scope, action, entity_type, entity_id, outcome,
+                            correlation_id, details, created_at
+                        ) VALUES (
+                            :eventId, :actorUserId, :subjectUserId, :restaurantId,
+                            :scope, :action, :entityType, :entityId, 'SUCCESS',
+                            :correlationId, CAST(:details AS JSONB), :createdAt
+                        )
+                        ON CONFLICT (event_id) DO NOTHING
+                        """)
+                .param("eventId", eventId)
+                .param("actorUserId", actorUserId)
+                .param("subjectUserId", subjectUserId)
+                .param("restaurantId", restaurantId)
+                .param("scope", scope)
+                .param("action", action)
+                .param("entityType", entityType)
+                .param("entityId", entityId)
+                .param("correlationId", correlationId)
+                .param("details", details)
+                .param("createdAt", OffsetDateTime.ofInstant(createdAt, java.time.ZoneOffset.UTC))
+                .update();
+    }
+
+    public void insertSystemEvent(
+            String level,
+            String service,
+            String eventType,
+            String message,
+            UUID correlationId,
+            String details,
+            Instant createdAt) {
+        jdbc.sql("""
+                        INSERT INTO system_events (
+                            level, service, event_type, message, correlation_id, details, created_at
+                        ) VALUES (
+                            :level, :service, :eventType, :message, :correlationId,
+                            CAST(:details AS JSONB), :createdAt
+                        )
+                        """)
+                .param("level", level)
+                .param("service", service)
+                .param("eventType", eventType)
+                .param("message", message)
+                .param("correlationId", correlationId)
+                .param("details", details)
+                .param("createdAt", OffsetDateTime.ofInstant(createdAt, java.time.ZoneOffset.UTC))
+                .update();
+    }
+
     private static QuerySpec auditSpec(
             String action,
             String outcome,

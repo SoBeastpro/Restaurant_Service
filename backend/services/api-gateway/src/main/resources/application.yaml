@@ -98,3 +98,6 @@ logging:
   pattern:
     level: "%5p [service:${spring.application.name}] [requestId:%X{requestId:-}]"
 
+internal:
+  api-secret: ${INTERNAL_API_SECRET:local-internal-api-key-change-me}
+

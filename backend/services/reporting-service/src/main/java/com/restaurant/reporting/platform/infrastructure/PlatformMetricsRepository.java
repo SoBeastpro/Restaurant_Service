@@ -6,6 +6,8 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Set;
+import java.util.UUID;
 
 import com.restaurant.reporting.platform.api.PlatformMetricsDtos.DailyMetricsResponse;
 import com.restaurant.reporting.platform.api.PlatformMetricsDtos.PlatformMetricsResponse;
@@ -15,6 +17,10 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public class PlatformMetricsRepository {
+
+    private static final Set<String> COUNTERS = Set.of(
+            "shifts_opened", "shifts_closed", "tasks_created", "tasks_completed",
+            "tasks_cancelled", "tasks_overdue", "table_status_changes");
 
     private final JdbcClient jdbc;
 
@@ -80,6 +86,9 @@ public class PlatformMetricsRepository {
         return new PlatformMetricsResponse(
                 from,
                 to,
+                0, 0, 0, 0,
+                0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0,
                 totals.restaurants(),
                 activeMembers,
                 totals.shiftsOpened(),
@@ -91,6 +100,40 @@ public class PlatformMetricsRepository {
                 totals.tableStatusChanges(),
                 completionRate,
                 daily);
+    }
+
+    public boolean beginInbox(UUID eventId, String eventType, String producer) {
+        return jdbc.sql("""
+                        INSERT INTO inbox_messages (message_id, event_type, producer)
+                        VALUES (:eventId, :eventType, :producer)
+                        ON CONFLICT (message_id) DO NOTHING
+                        """)
+                .param("eventId", eventId)
+                .param("eventType", eventType)
+                .param("producer", producer)
+                .update() == 1;
+    }
+
+    public void increment(UUID restaurantId, LocalDate metricDate, String counter) {
+        if (!COUNTERS.contains(counter)) {
+            throw new IllegalArgumentException("Unknown metric counter: " + counter);
+        }
+        jdbc.sql("""
+                        INSERT INTO restaurant_daily_metrics (restaurant_id, metric_date, %s)
+                        VALUES (:restaurantId, :metricDate, 1)
+                        ON CONFLICT (restaurant_id, metric_date) DO UPDATE
+                        SET %s = restaurant_daily_metrics.%s + 1,
+                            updated_at = CURRENT_TIMESTAMP
+                        """.formatted(counter, counter, counter))
+                .param("restaurantId", restaurantId)
+                .param("metricDate", metricDate)
+                .update();
+    }
+
+    public void completeInbox(UUID eventId) {
+        jdbc.sql("UPDATE inbox_messages SET processed_at = CURRENT_TIMESTAMP WHERE message_id = :eventId")
+                .param("eventId", eventId)
+                .update();
     }
 
     private static Totals mapTotals(ResultSet result, int rowNumber) throws SQLException {

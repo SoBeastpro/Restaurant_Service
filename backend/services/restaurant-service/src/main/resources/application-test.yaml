@@ -16,3 +16,7 @@ logging:
     root: WARN
     com.restaurant: INFO
 
+restaurant:
+  outbox:
+    enabled: false
+

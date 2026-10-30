@@ -20,6 +20,15 @@ import tools.jackson.databind.ObjectMapper;
 @Repository
 public class PlatformBillingRepository {
 
+    public record BillingMetricsSummary(
+            long subscriptionsTotal,
+            long activeSubscriptions,
+            long expiredSubscriptions,
+            long cancelledSubscriptions,
+            long activeTariffs,
+            long archivedTariffs) {
+    }
+
     private static final String SUBSCRIPTION_SELECT = """
             SELECT s.id, s.restaurant_id, s.plan_id, p.code AS plan_code, p.name AS plan_name,
                    s.activated_by_membership_id, s.activated_by_user_id, s.status,
@@ -133,6 +142,26 @@ public class PlatformBillingRepository {
                         SET status = 'EXPIRED'
                         WHERE status = 'ACTIVE' AND ends_at <= CURRENT_TIMESTAMP
                         """).update();
+    }
+
+    public BillingMetricsSummary metricsSummary() {
+        return jdbc.sql("""
+                        SELECT
+                            (SELECT COUNT(*) FROM subscriptions) AS subscriptions_total,
+                            (SELECT COUNT(*) FROM subscriptions WHERE status = 'ACTIVE') AS active_subscriptions,
+                            (SELECT COUNT(*) FROM subscriptions WHERE status = 'EXPIRED') AS expired_subscriptions,
+                            (SELECT COUNT(*) FROM subscriptions WHERE status = 'CANCELLED') AS cancelled_subscriptions,
+                            (SELECT COUNT(*) FROM tariff_plans WHERE status = 'ACTIVE') AS active_tariffs,
+                            (SELECT COUNT(*) FROM tariff_plans WHERE status = 'ARCHIVED') AS archived_tariffs
+                        """)
+                .query((result, rowNumber) -> new BillingMetricsSummary(
+                        result.getLong("subscriptions_total"),
+                        result.getLong("active_subscriptions"),
+                        result.getLong("expired_subscriptions"),
+                        result.getLong("cancelled_subscriptions"),
+                        result.getLong("active_tariffs"),
+                        result.getLong("archived_tariffs")))
+                .single();
     }
 
     public List<SubscriptionResponse> findSubscriptions(

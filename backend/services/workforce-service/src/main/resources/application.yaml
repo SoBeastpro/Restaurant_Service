@@ -56,6 +56,10 @@ logging:
   pattern:
     level: "%5p [service:${spring.application.name}] [requestId:%X{requestId:-}]"
 
+restaurant:
+  outbox:
+    enabled: true
+
 services:
   identity:
     url: ${IDENTITY_SERVICE_URL:http://localhost:8081}

@@ -9,6 +9,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.util.List;
 import java.util.UUID;
 
+import com.restaurant.billing.platform.infrastructure.RestaurantDirectoryClient;
+import com.restaurant.billing.platform.infrastructure.RestaurantDirectoryClient.RestaurantStatus;
+
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -26,6 +29,8 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
+import static org.mockito.Mockito.when;
+
 @Testcontainers
 @ActiveProfiles("test")
 @SpringBootTest
@@ -37,6 +42,7 @@ class BillingServiceApplicationTests {
     @Autowired MockMvc mockMvc;
     @Autowired ObjectMapper objectMapper;
     @MockitoBean JwtDecoder jwtDecoder;
+    @MockitoBean RestaurantDirectoryClient restaurantDirectoryClient;
 
     @Test void contextLoads() {
     }
@@ -45,6 +51,8 @@ class BillingServiceApplicationTests {
     void systemAdminManagesTariffAndSubscriptionLifecycle() throws Exception {
         UUID adminId = UUID.randomUUID();
         UUID restaurantId = UUID.randomUUID();
+        when(restaurantDirectoryClient.requireSubscriptionTarget(restaurantId))
+                .thenReturn(new RestaurantStatus(restaurantId, "ACTIVE"));
 
         JsonNode tariff = objectMapper.readTree(mockMvc.perform(post("/api/v1/platform/tariffs")
                         .with(systemAdmin(adminId))
