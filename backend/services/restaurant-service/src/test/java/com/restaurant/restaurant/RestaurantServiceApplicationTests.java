@@ -14,6 +14,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.util.UUID;
+import java.util.List;
 
 import com.restaurant.restaurant.setup.infrastructure.IdentityOnboardingClient;
 import com.restaurant.restaurant.setup.infrastructure.IdentityOnboardingClient.DirectorProfile;
@@ -288,6 +289,38 @@ class RestaurantServiceApplicationTests {
                 .andExpect(jsonPath("$[0].changedByMembershipId").value(waiterMembershipId.toString()));
     }
 
+    @Test
+    void systemAdminListsAndBlocksRestaurant() throws Exception {
+        UUID adminId = UUID.randomUUID();
+        UUID restaurantId = UUID.randomUUID();
+        jdbc.sql("""
+                        INSERT INTO restaurants (id, director_user_id, name, address)
+                        VALUES (:restaurantId, :directorId, 'Ресторан для блокировки', 'Москва')
+                        """)
+                .param("restaurantId", restaurantId)
+                .param("directorId", UUID.randomUUID())
+                .update();
+
+        mockMvc.perform(get("/api/v1/platform/restaurants")
+                        .param("query", "для блокировки")
+                        .with(systemAdminJwt(adminId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].id").value(restaurantId.toString()));
+
+        mockMvc.perform(patch("/api/v1/platform/restaurants/{restaurantId}/status", restaurantId)
+                        .with(systemAdminJwt(adminId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"BLOCKED\",\"reason\":\"нарушение\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("BLOCKED"));
+
+        mockMvc.perform(get("/api/v1/platform/restaurants/{restaurantId}", restaurantId)
+                        .with(managerJwt(UUID.randomUUID(), restaurantId)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("SYSTEM_ADMIN_REQUIRED"));
+    }
+
     private static org.springframework.test.web.servlet.request.RequestPostProcessor employeeJwt(
             UUID userId,
             UUID restaurantId) {
@@ -304,5 +337,11 @@ class RestaurantServiceApplicationTests {
                 .subject(userId.toString())
                 .claim("role", "MANAGER")
                 .claim("restaurant_id", restaurantId.toString()));
+    }
+
+    private static org.springframework.test.web.servlet.request.RequestPostProcessor systemAdminJwt(UUID userId) {
+        return jwt().jwt(token -> token
+                .subject(userId.toString())
+                .claim("platform_roles", List.of("SYSTEM_ADMIN")));
     }
 }

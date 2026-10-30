@@ -24,6 +24,9 @@
 | статистика | `reporting-service` |
 | `/platform/users/**` | `identity-service` |
 | `/platform/restaurants/**` | `restaurant-service` |
+| `/platform/tariffs/**`, `/platform/subscriptions/**` | `billing-service` |
+| `/platform/metrics` | `reporting-service` |
+| `/platform/audit-log`, `/platform/system-events` | `audit-service` |
 | составные read-only `/me/**` | композиция в Gateway |
 
 Все изменяющие состояние запросы должны поддерживать `Idempotency-Key`; Gateway прокидывает
@@ -39,7 +42,7 @@
 | Authenticated | Любой авторизованный пользователь |
 | Manager | Менеджер ресторана |
 | Employee | Официант или раннер (или другой сотрудник)    |
-| Platform admin | Системная поддержка (будет реализована позднее) |
+| Platform admin | Пользователь с `SYSTEM_ADMIN` в JWT claim `platform_roles` |
 | TBD | Будет уточнено после утверждения permissions |
 
 ## Авторизация и сессии
@@ -274,17 +277,42 @@ React Native не подключается напрямую к RabbitMQ. RabbitM
 
 ## Системная поддержка
 
-Этот блок обязателен, но будет реализован позднее под `/api/v1/platform`.
+Все методы доступны только пользователю с ролью `SYSTEM_ADMIN` в JWT claim `platform_roles`.
+Списки пользователей, ресторанов, подписок, аудита и событий используют нумерацию страниц с нуля;
+максимальный `size` равен 100. Удаление тарифа означает архивирование: исторические подписки
+остаются связаны с ним. В метриках по умолчанию возвращаются последние 30 календарных дней,
+максимальный период — один год.
 
 | Метод | Endpoint | Доступ | Назначение |
 |---|---|---|---|
 | `GET` | `/platform/restaurants` | Platform admin | Получить рестораны платформы |
+| `GET` | `/platform/restaurants/{restaurantId}` | Platform admin | Получить карточку ресторана |
 | `PATCH` | `/platform/restaurants/{restaurantId}/status` | Platform admin | Заблокировать или разблокировать ресторан |
 | `GET` | `/platform/users` | Platform admin | Получить пользователей платформы |
+| `GET` | `/platform/users/{userId}` | Platform admin | Получить карточку пользователя |
 | `PATCH` | `/platform/users/{userId}/status` | Platform admin | Заблокировать или разблокировать пользователя |
-| `GET` | `/platform/subscriptions` | Platform admin | Получить подписки |
+| `GET` | `/platform/tariffs` | Platform admin | Получить тарифы |
+| `POST` | `/platform/tariffs` | Platform admin | Создать тариф |
+| `GET` | `/platform/tariffs/{tariffId}` | Platform admin | Получить тариф |
+| `PATCH` | `/platform/tariffs/{tariffId}` | Platform admin | Изменить или восстановить тариф |
+| `DELETE` | `/platform/tariffs/{tariffId}` | Platform admin | Архивировать тариф |
+| `GET` | `/platform/subscriptions` | Platform admin | Получить подписки с фильтрами |
+| `POST` | `/platform/subscriptions` | Platform admin | Активировать подписку ресторана |
+| `GET` | `/platform/subscriptions/{subscriptionId}` | Platform admin | Получить подписку |
+| `POST` | `/platform/subscriptions/{subscriptionId}/extend` | Platform admin | Продлить активную подписку |
+| `POST` | `/platform/subscriptions/{subscriptionId}/cancel` | Platform admin | Отменить активную подписку |
+| `GET` | `/platform/metrics` | Platform admin | Получить агрегированные метрики за период |
 | `GET` | `/platform/audit-log` | Platform admin | Получить журнал платформы |
 | `GET` | `/platform/system-events` | Platform admin | Получить технические события |
+
+Статусы пользователей и ресторанов: `ACTIVE`, `BLOCKED`, `ARCHIVED`. Архивированный ресторан
+нельзя вернуть в работу. Системный администратор не может заблокировать или архивировать свой
+аккаунт. Блокировка пользователя отзывает все его активные сессии.
+
+Статусы подписки: `ACTIVE`, `EXPIRED`, `CANCELLED`. У ресторана одновременно может быть только
+одна активная подписка. Продление и отмена применяются только к активной подписке. Способ
+активации — `STUB` или `PAYMENT_PROVIDER`; пока платёжный провайдер не подключён, клиент отправляет
+`STUB` или не передаёт поле вовсе.
 
 ## Общие HTTP-ответы
 

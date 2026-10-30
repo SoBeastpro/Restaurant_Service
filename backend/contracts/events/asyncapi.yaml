@@ -71,6 +71,10 @@ channels:
     publish:
       message:
         $ref: '#/components/messages/SubscriptionStatusChanged'
+  billing.tariff.changed.v1:
+    publish:
+      message:
+        $ref: '#/components/messages/TariffChanged'
   notification.created.v1:
     publish:
       message:
@@ -204,6 +208,15 @@ components:
             properties:
               payload:
                 $ref: '#/components/schemas/SubscriptionPayload'
+    TariffChanged:
+      name: billing.tariff.changed.v1
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/EventEnvelope'
+          - type: object
+            properties:
+              payload:
+                $ref: '#/components/schemas/TariffPayload'
     NotificationCreated:
       name: notification.created.v1
       payload:
@@ -285,6 +298,13 @@ components:
         subscriptionId: { type: string, format: uuid }
         restaurantId: { type: string, format: uuid }
         status: { type: string, enum: [ACTIVE, EXPIRED, CANCELLED] }
+    TariffPayload:
+      type: object
+      required: [tariffId, action, status]
+      properties:
+        tariffId: { type: string, format: uuid }
+        action: { type: string, enum: [CREATED, UPDATED, ARCHIVED] }
+        status: { type: string, enum: [ACTIVE, ARCHIVED] }
     NotificationPayload:
       type: object
       required: [notificationId, userId, type]

@@ -1,7 +1,9 @@
 package com.restaurant.identity;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -9,6 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.util.UUID;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -201,6 +204,63 @@ class IdentityServiceApplicationTests {
     }
 
     @Test
+    void systemAdminListsAndBlocksPlatformUser() throws Exception {
+        UUID adminId = UUID.randomUUID();
+        UUID targetId = UUID.randomUUID();
+        jdbc.sql("""
+                        INSERT INTO users (
+                            id, login, password_hash, first_name, last_name, role_code, status
+                        ) VALUES (
+                            :id, :login, '{bcrypt}unused', 'Иван', 'Сотрудник', 'DIRECTOR', 'ACTIVE'
+                        )
+                        """)
+                .param("id", targetId)
+                .param("login", "platform-user-" + targetId)
+                .update();
+
+        mockMvc.perform(get("/api/v1/platform/users")
+                        .param("query", "Иван Сотрудник")
+                        .with(systemAdmin(adminId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].id").value(targetId.toString()));
+
+        mockMvc.perform(patch("/api/v1/platform/users/{userId}/status", targetId)
+                        .with(systemAdmin(adminId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"blocked\",\"reason\":\"проверка\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("BLOCKED"));
+
+        assertThat(jdbc.sql("SELECT COUNT(*) FROM outbox_events WHERE aggregate_id = :id")
+                .param("id", targetId)
+                .query(Long.class)
+                .single()).isEqualTo(1);
+    }
+
+    @Test
+    void systemAdminCannotBlockOwnAccount() throws Exception {
+        UUID adminId = UUID.randomUUID();
+        jdbc.sql("""
+                        INSERT INTO users (
+                            id, login, password_hash, first_name, last_name, role_code, status
+                        ) VALUES (
+                            :id, :login, '{bcrypt}unused', 'Системный', 'Администратор', 'SYSTEM_ADMIN', 'ACTIVE'
+                        )
+                        """)
+                .param("id", adminId)
+                .param("login", "platform-admin-" + adminId)
+                .update();
+
+        mockMvc.perform(patch("/api/v1/platform/users/{userId}/status", adminId)
+                        .with(systemAdmin(adminId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"BLOCKED\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("SYSTEM_ADMIN_SELF_BLOCK_FORBIDDEN"));
+    }
+
+    @Test
     void directorActivatesThirtyDayLocalSubscriptionStubIdempotently() throws Exception {
         String login = "subscription." + UUID.randomUUID().toString().substring(0, 8);
         mockMvc.perform(post("/api/v1/auth/register")
@@ -270,5 +330,11 @@ class IdentityServiceApplicationTests {
 
     private JsonNode body(String json) {
         return objectMapper.readTree(json);
+    }
+
+    private static org.springframework.test.web.servlet.request.RequestPostProcessor systemAdmin(UUID userId) {
+        return jwt().jwt(token -> token
+                .subject(userId.toString())
+                .claim("platform_roles", List.of("SYSTEM_ADMIN")));
     }
 }

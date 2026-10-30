@@ -62,6 +62,7 @@ services:
       DATABASE_PASSWORD: identity
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_PORT: 5672
+      JWT_JWK_SET_URI: http://identity-service:8080/.well-known/jwks.json
       JWT_ISSUER: https://identity.restaurant.internal
       JWT_AUDIENCE: restaurant-api
     ports: ["127.0.0.1:8081:8080"]
@@ -160,10 +161,14 @@ services:
       DATABASE_PASSWORD: billing
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_PORT: 5672
+      JWT_JWK_SET_URI: http://identity-service:8080/.well-known/jwks.json
+      JWT_ISSUER: https://identity.restaurant.internal
+      JWT_AUDIENCE: restaurant-api
     ports: ["127.0.0.1:8085:8080"]
     depends_on:
       postgres: { condition: service_healthy }
       rabbitmq: { condition: service_healthy }
+      identity-service: { condition: service_started }
 
   notification-service:
     profiles: [app]
@@ -200,10 +205,14 @@ services:
       DATABASE_PASSWORD: audit
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_PORT: 5672
+      JWT_JWK_SET_URI: http://identity-service:8080/.well-known/jwks.json
+      JWT_ISSUER: https://identity.restaurant.internal
+      JWT_AUDIENCE: restaurant-api
     ports: ["127.0.0.1:8087:8080"]
     depends_on:
       postgres: { condition: service_healthy }
       rabbitmq: { condition: service_healthy }
+      identity-service: { condition: service_started }
 
   reporting-service:
     profiles: [app]
@@ -218,10 +227,14 @@ services:
       DATABASE_PASSWORD: reporting
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_PORT: 5672
+      JWT_JWK_SET_URI: http://identity-service:8080/.well-known/jwks.json
+      JWT_ISSUER: https://identity.restaurant.internal
+      JWT_AUDIENCE: restaurant-api
     ports: ["127.0.0.1:8088:8080"]
     depends_on:
       postgres: { condition: service_healthy }
       rabbitmq: { condition: service_healthy }
+      identity-service: { condition: service_started }
 
   api-gateway:
     profiles: [app]

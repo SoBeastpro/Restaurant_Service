@@ -24,6 +24,13 @@ spring:
   mvc:
     problemdetails:
       enabled: true
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: ${JWT_JWK_SET_URI:http://localhost:8081/.well-known/jwks.json}
+          issuer-uri: ${JWT_ISSUER:https://identity.restaurant.internal}
+          audiences: ["${JWT_AUDIENCE:restaurant-api}"]
 
 server:
   port: ${SERVER_PORT:8088}

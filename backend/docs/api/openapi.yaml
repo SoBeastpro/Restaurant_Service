@@ -1453,10 +1453,39 @@ paths:
       tags: [Platform]
       summary: Получить рестораны платформы
       operationId: platformListRestaurants
-      x-access: Platform admin
+      x-access: SYSTEM_ADMIN
+      parameters:
+        - name: query
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { $ref: "#/components/schemas/PlatformEntityStatus" }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Size"
       responses:
         "200":
-          $ref: "#/components/responses/Ok"
+          description: Страница ресторанов
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PlatformRestaurantPage" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /platform/restaurants/{restaurantId}:
+    parameters:
+      - $ref: "#/components/parameters/RestaurantId"
+    get:
+      tags: [Platform]
+      summary: Получить ресторан платформы
+      operationId: platformGetRestaurant
+      x-access: SYSTEM_ADMIN
+      responses:
+        "200":
+          description: Ресторан
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PlatformRestaurant" }
+        default: { $ref: "#/components/responses/Error" }
 
   /platform/restaurants/{restaurantId}/status:
     parameters:
@@ -1465,22 +1494,61 @@ paths:
       tags: [Platform]
       summary: Изменить статус ресторана
       operationId: platformUpdateRestaurantStatus
-      x-access: Platform admin
+      x-access: SYSTEM_ADMIN
       requestBody:
-        $ref: "#/components/requestBodies/JsonBody"
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdatePlatformStatusRequest" }
       responses:
         "200":
-          $ref: "#/components/responses/Ok"
+          description: Обновлённый ресторан
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PlatformRestaurant" }
+        default: { $ref: "#/components/responses/Error" }
 
   /platform/users:
     get:
       tags: [Platform]
       summary: Получить пользователей платформы
       operationId: platformListUsers
-      x-access: Platform admin
+      x-access: SYSTEM_ADMIN
+      parameters:
+        - name: query
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { $ref: "#/components/schemas/PlatformEntityStatus" }
+        - name: role
+          in: query
+          schema: { type: string, enum: [SYSTEM_ADMIN, DIRECTOR, MANAGER, EMPLOYEE] }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Size"
       responses:
         "200":
-          $ref: "#/components/responses/Ok"
+          description: Страница пользователей
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PlatformUserPage" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /platform/users/{userId}:
+    parameters:
+      - $ref: "#/components/parameters/UserId"
+    get:
+      tags: [Platform]
+      summary: Получить пользователя платформы
+      operationId: platformGetUser
+      x-access: SYSTEM_ADMIN
+      responses:
+        "200":
+          description: Пользователь
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PlatformUser" }
+        default: { $ref: "#/components/responses/Error" }
 
   /platform/users/{userId}/status:
     parameters:
@@ -1489,42 +1557,305 @@ paths:
       tags: [Platform]
       summary: Изменить статус пользователя
       operationId: platformUpdateUserStatus
-      x-access: Platform admin
+      x-access: SYSTEM_ADMIN
       requestBody:
-        $ref: "#/components/requestBodies/JsonBody"
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdatePlatformStatusRequest" }
       responses:
         "200":
-          $ref: "#/components/responses/Ok"
+          description: Обновлённый пользователь
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PlatformUser" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /platform/tariffs:
+    get:
+      tags: [Platform]
+      summary: Получить тарифы
+      operationId: platformListTariffs
+      x-access: SYSTEM_ADMIN
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string, enum: [ACTIVE, ARCHIVED] }
+      responses:
+        "200":
+          description: Тарифы
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/PlatformTariff" }
+        default: { $ref: "#/components/responses/Error" }
+    post:
+      tags: [Platform]
+      summary: Создать тариф
+      operationId: platformCreateTariff
+      x-access: SYSTEM_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreatePlatformTariffRequest" }
+      responses:
+        "201":
+          description: Созданный тариф
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PlatformTariff" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /platform/tariffs/{tariffId}:
+    parameters:
+      - name: tariffId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Platform]
+      summary: Получить тариф
+      operationId: platformGetTariff
+      x-access: SYSTEM_ADMIN
+      responses:
+        "200":
+          description: Тариф
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PlatformTariff" }
+        default: { $ref: "#/components/responses/Error" }
+    patch:
+      tags: [Platform]
+      summary: Изменить тариф
+      operationId: platformUpdateTariff
+      x-access: SYSTEM_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdatePlatformTariffRequest" }
+      responses:
+        "200":
+          description: Обновлённый тариф
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PlatformTariff" }
+        default: { $ref: "#/components/responses/Error" }
+    delete:
+      tags: [Platform]
+      summary: Архивировать тариф
+      operationId: platformArchiveTariff
+      x-access: SYSTEM_ADMIN
+      responses:
+        "204": { $ref: "#/components/responses/NoContent" }
+        default: { $ref: "#/components/responses/Error" }
 
   /platform/subscriptions:
     get:
       tags: [Platform]
       summary: Получить подписки платформы
       operationId: platformListSubscriptions
-      x-access: Platform admin
+      x-access: SYSTEM_ADMIN
+      parameters:
+        - name: restaurantId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: planId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: status
+          in: query
+          schema: { type: string, enum: [ACTIVE, EXPIRED, CANCELLED] }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Size"
       responses:
         "200":
-          $ref: "#/components/responses/Ok"
+          description: Страница подписок
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PlatformSubscriptionPage" }
+        default: { $ref: "#/components/responses/Error" }
+    post:
+      tags: [Platform]
+      summary: Активировать подписку ресторана
+      operationId: platformActivateSubscription
+      x-access: SYSTEM_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ActivatePlatformSubscriptionRequest" }
+      responses:
+        "201":
+          description: Активированная подписка
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PlatformSubscription" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /platform/subscriptions/{subscriptionId}:
+    parameters:
+      - name: subscriptionId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Platform]
+      summary: Получить подписку
+      operationId: platformGetSubscription
+      x-access: SYSTEM_ADMIN
+      responses:
+        "200":
+          description: Подписка
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PlatformSubscription" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /platform/subscriptions/{subscriptionId}/extend:
+    parameters:
+      - name: subscriptionId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Platform]
+      summary: Продлить подписку
+      operationId: platformExtendSubscription
+      x-access: SYSTEM_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ExtendPlatformSubscriptionRequest" }
+      responses:
+        "200":
+          description: Продлённая подписка
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PlatformSubscription" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /platform/subscriptions/{subscriptionId}/cancel:
+    parameters:
+      - name: subscriptionId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Platform]
+      summary: Отменить подписку
+      operationId: platformCancelSubscription
+      x-access: SYSTEM_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CancelPlatformSubscriptionRequest" }
+      responses:
+        "200":
+          description: Отменённая подписка
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PlatformSubscription" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /platform/metrics:
+    get:
+      tags: [Platform]
+      summary: Получить агрегированные метрики платформы
+      operationId: platformMetrics
+      x-access: SYSTEM_ADMIN
+      parameters:
+        - name: from
+          in: query
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          schema: { type: string, format: date }
+      responses:
+        "200":
+          description: Метрики за период
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PlatformMetrics" }
+        default: { $ref: "#/components/responses/Error" }
 
   /platform/audit-log:
     get:
       tags: [Platform]
       summary: Получить журнал платформы
       operationId: platformAuditLog
-      x-access: Platform admin
+      x-access: SYSTEM_ADMIN
+      parameters:
+        - name: action
+          in: query
+          schema: { type: string }
+        - name: outcome
+          in: query
+          schema: { type: string, enum: [SUCCESS, DENIED, FAILED] }
+        - name: actorUserId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: subjectUserId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: restaurantId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: from
+          in: query
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          schema: { type: string, format: date-time }
+        - $ref: "#/components/parameters/Page"
+        - name: size
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
       responses:
         "200":
-          $ref: "#/components/responses/Ok"
+          description: Страница записей аудита
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PlatformAuditPage" }
+        default: { $ref: "#/components/responses/Error" }
 
   /platform/system-events:
     get:
       tags: [Platform]
       summary: Получить технические события
       operationId: platformSystemEvents
-      x-access: Platform admin
+      x-access: SYSTEM_ADMIN
+      parameters:
+        - name: level
+          in: query
+          schema: { type: string, enum: [TRACE, DEBUG, INFO, WARN, ERROR] }
+        - name: service
+          in: query
+          schema: { type: string }
+        - name: eventType
+          in: query
+          schema: { type: string }
+        - name: from
+          in: query
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          schema: { type: string, format: date-time }
+        - $ref: "#/components/parameters/Page"
+        - name: size
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
       responses:
         "200":
-          $ref: "#/components/responses/Ok"
+          description: Страница системных событий
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PlatformSystemEventPage" }
+        default: { $ref: "#/components/responses/Error" }
 
 components:
   securitySchemes:
@@ -1696,6 +2027,271 @@ components:
           type: object
           additionalProperties:
             type: string
+
+    PlatformEntityStatus:
+      type: string
+      enum: [ACTIVE, BLOCKED, ARCHIVED]
+
+    UpdatePlatformStatusRequest:
+      type: object
+      required: [status]
+      properties:
+        status: { $ref: "#/components/schemas/PlatformEntityStatus" }
+        reason: { type: string, maxLength: 500 }
+
+    PlatformUser:
+      type: object
+      required: [id, login, firstName, lastName, role, status, platformRoles, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        login: { type: string }
+        email: { type: [string, "null"], format: email }
+        phone: { type: [string, "null"] }
+        firstName: { type: string }
+        lastName: { type: string }
+        role: { type: string, enum: [SYSTEM_ADMIN, DIRECTOR, MANAGER, EMPLOYEE] }
+        position: { type: [string, "null"], enum: [WAITER, RUNNER, null] }
+        restaurantId: { type: [string, "null"], format: uuid }
+        status: { $ref: "#/components/schemas/PlatformEntityStatus" }
+        platformRoles:
+          type: array
+          items: { type: string, enum: [SYSTEM_ADMIN] }
+        lastLoginAt: { type: [string, "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    PlatformUserPage:
+      type: object
+      required: [content, page, size, totalElements, totalPages]
+      properties:
+        content:
+          type: array
+          items: { $ref: "#/components/schemas/PlatformUser" }
+        page: { type: integer, minimum: 0 }
+        size: { type: integer, minimum: 1, maximum: 100 }
+        totalElements: { type: integer, format: int64, minimum: 0 }
+        totalPages: { type: integer, minimum: 0 }
+
+    PlatformRestaurant:
+      type: object
+      required: [id, directorUserId, name, status, hallsCount, tablesCount, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        directorUserId: { type: string, format: uuid }
+        name: { type: string }
+        address: { type: [string, "null"] }
+        phone: { type: [string, "null"] }
+        description: { type: [string, "null"] }
+        status: { $ref: "#/components/schemas/PlatformEntityStatus" }
+        hallsCount: { type: integer, minimum: 0 }
+        tablesCount: { type: integer, minimum: 0 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    PlatformRestaurantPage:
+      type: object
+      required: [content, page, size, totalElements, totalPages]
+      properties:
+        content:
+          type: array
+          items: { $ref: "#/components/schemas/PlatformRestaurant" }
+        page: { type: integer, minimum: 0 }
+        size: { type: integer, minimum: 1, maximum: 100 }
+        totalElements: { type: integer, format: int64, minimum: 0 }
+        totalPages: { type: integer, minimum: 0 }
+
+    PlatformTariff:
+      type: object
+      required: [id, code, name, price, currency, durationDays, features, status, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        code: { type: string }
+        name: { type: string }
+        description: { type: [string, "null"] }
+        price: { type: number, minimum: 0 }
+        currency: { type: string, pattern: "^[A-Z]{3}$" }
+        durationDays: { type: integer, minimum: 1, maximum: 3650 }
+        features: { type: object, additionalProperties: true }
+        status: { type: string, enum: [ACTIVE, ARCHIVED] }
+        createdByUserId: { type: [string, "null"], format: uuid }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    CreatePlatformTariffRequest:
+      type: object
+      required: [code, name, price, currency, durationDays]
+      properties:
+        code: { type: string, minLength: 1, maxLength: 50 }
+        name: { type: string, minLength: 1, maxLength: 100 }
+        description: { type: string }
+        price: { type: number, minimum: 0 }
+        currency: { type: string, pattern: "^[A-Za-z]{3}$" }
+        durationDays: { type: integer, minimum: 1, maximum: 3650 }
+        features: { type: object, additionalProperties: true }
+
+    UpdatePlatformTariffRequest:
+      type: object
+      minProperties: 1
+      properties:
+        name: { type: string, minLength: 1, maxLength: 100 }
+        description: { type: string }
+        price: { type: number, minimum: 0 }
+        currency: { type: string, pattern: "^[A-Za-z]{3}$" }
+        durationDays: { type: integer, minimum: 1, maximum: 3650 }
+        features: { type: object, additionalProperties: true }
+        status: { type: string, enum: [ACTIVE, ARCHIVED] }
+
+    PlatformSubscription:
+      type: object
+      required:
+        [id, restaurantId, planId, planCode, planName, status, activationMode, startsAt, endsAt, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        restaurantId: { type: string, format: uuid }
+        planId: { type: string, format: uuid }
+        planCode: { type: string }
+        planName: { type: string }
+        activatedByMembershipId: { type: [string, "null"], format: uuid }
+        activatedByUserId: { type: [string, "null"], format: uuid }
+        status: { type: string, enum: [ACTIVE, EXPIRED, CANCELLED] }
+        activationMode: { type: string, enum: [STUB, PAYMENT_PROVIDER] }
+        startsAt: { type: string, format: date-time }
+        endsAt: { type: string, format: date-time }
+        cancelledAt: { type: [string, "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    PlatformSubscriptionPage:
+      type: object
+      required: [content, page, size, totalElements, totalPages]
+      properties:
+        content:
+          type: array
+          items: { $ref: "#/components/schemas/PlatformSubscription" }
+        page: { type: integer, minimum: 0 }
+        size: { type: integer, minimum: 1, maximum: 100 }
+        totalElements: { type: integer, format: int64, minimum: 0 }
+        totalPages: { type: integer, minimum: 0 }
+
+    ActivatePlatformSubscriptionRequest:
+      type: object
+      required: [restaurantId, planId]
+      properties:
+        restaurantId: { type: string, format: uuid }
+        planId: { type: string, format: uuid }
+        startsAt: { type: string, format: date-time }
+        durationDays: { type: integer, minimum: 1, maximum: 3650 }
+        activationMode: { type: string, enum: [STUB, PAYMENT_PROVIDER], default: STUB }
+
+    ExtendPlatformSubscriptionRequest:
+      type: object
+      required: [days]
+      properties:
+        days: { type: integer, minimum: 1, maximum: 3650 }
+        reason: { type: string, maxLength: 500 }
+
+    CancelPlatformSubscriptionRequest:
+      type: object
+      properties:
+        reason: { type: string, maxLength: 500 }
+
+    PlatformDailyMetrics:
+      type: object
+      required:
+        [date, restaurants, shiftsOpened, shiftsClosed, tasksCreated, tasksCompleted, tasksCancelled, tasksOverdue, tableStatusChanges]
+      properties:
+        date: { type: string, format: date }
+        restaurants: { type: integer, format: int64, minimum: 0 }
+        shiftsOpened: { type: integer, format: int64, minimum: 0 }
+        shiftsClosed: { type: integer, format: int64, minimum: 0 }
+        tasksCreated: { type: integer, format: int64, minimum: 0 }
+        tasksCompleted: { type: integer, format: int64, minimum: 0 }
+        tasksCancelled: { type: integer, format: int64, minimum: 0 }
+        tasksOverdue: { type: integer, format: int64, minimum: 0 }
+        tableStatusChanges: { type: integer, format: int64, minimum: 0 }
+
+    PlatformMetrics:
+      type: object
+      required:
+        [from, to, restaurantsWithData, activeMembers, shiftsOpened, shiftsClosed, tasksCreated, tasksCompleted, tasksCancelled, tasksOverdue, tableStatusChanges, taskCompletionRate, daily]
+      properties:
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+        restaurantsWithData:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Число ресторанов, для которых есть агрегаты за выбранный период.
+        activeMembers: { type: integer, format: int64, minimum: 0 }
+        shiftsOpened: { type: integer, format: int64, minimum: 0 }
+        shiftsClosed: { type: integer, format: int64, minimum: 0 }
+        tasksCreated: { type: integer, format: int64, minimum: 0 }
+        tasksCompleted: { type: integer, format: int64, minimum: 0 }
+        tasksCancelled: { type: integer, format: int64, minimum: 0 }
+        tasksOverdue: { type: integer, format: int64, minimum: 0 }
+        tableStatusChanges: { type: integer, format: int64, minimum: 0 }
+        taskCompletionRate: { type: number, minimum: 0 }
+        daily:
+          type: array
+          items: { $ref: "#/components/schemas/PlatformDailyMetrics" }
+
+    PlatformAuditRecord:
+      type: object
+      required: [id, scope, action, outcome, details, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        eventId: { type: [string, "null"], format: uuid }
+        actorUserId: { type: [string, "null"], format: uuid }
+        actorMembershipId: { type: [string, "null"], format: uuid }
+        subjectUserId: { type: [string, "null"], format: uuid }
+        restaurantId: { type: [string, "null"], format: uuid }
+        scope: { type: string, enum: [PLATFORM] }
+        action: { type: string }
+        entityType: { type: [string, "null"] }
+        entityId: { type: [string, "null"], format: uuid }
+        outcome: { type: string, enum: [SUCCESS, DENIED, FAILED] }
+        ipAddress: { type: [string, "null"] }
+        userAgent: { type: [string, "null"] }
+        correlationId: { type: [string, "null"], format: uuid }
+        details: { type: object, additionalProperties: true }
+        createdAt: { type: string, format: date-time }
+
+    PlatformAuditPage:
+      type: object
+      required: [content, page, size, totalElements, totalPages]
+      properties:
+        content:
+          type: array
+          items: { $ref: "#/components/schemas/PlatformAuditRecord" }
+        page: { type: integer, minimum: 0 }
+        size: { type: integer, minimum: 1, maximum: 100 }
+        totalElements: { type: integer, format: int64, minimum: 0 }
+        totalPages: { type: integer, minimum: 0 }
+
+    PlatformSystemEvent:
+      type: object
+      required: [id, level, service, eventType, message, details, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        level: { type: string, enum: [TRACE, DEBUG, INFO, WARN, ERROR] }
+        service: { type: string }
+        eventType: { type: string }
+        message: { type: string }
+        correlationId: { type: [string, "null"], format: uuid }
+        details: { type: object, additionalProperties: true }
+        createdAt: { type: string, format: date-time }
+
+    PlatformSystemEventPage:
+      type: object
+      required: [content, page, size, totalElements, totalPages]
+      properties:
+        content:
+          type: array
+          items: { $ref: "#/components/schemas/PlatformSystemEvent" }
+        page: { type: integer, minimum: 0 }
+        size: { type: integer, minimum: 1, maximum: 100 }
+        totalElements: { type: integer, format: int64, minimum: 0 }
+        totalPages: { type: integer, minimum: 0 }
 
     RegisterRequest:
       type: object
