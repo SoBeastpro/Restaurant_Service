@@ -26,6 +26,7 @@ import com.restaurant.workforce.invitation.infrastructure.IdentityClient.Invited
 import com.restaurant.workforce.invitation.infrastructure.InvitationRepository;
 import com.restaurant.workforce.invitation.infrastructure.InvitationRepository.InvitationRecord;
 import com.restaurant.workforce.invitation.infrastructure.InvitationRepository.InviterRecord;
+import com.restaurant.workforce.invitation.infrastructure.InvitationTokenCipher;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -43,15 +44,24 @@ public class InvitationService {
     private final InvitationRepository repository;
     private final IdentityClient identityClient;
     private final Clock clock;
+    private final InvitationTokenCipher tokenCipher;
 
     @Autowired
-    public InvitationService(InvitationRepository repository, IdentityClient identityClient) {
-        this(repository, identityClient, Clock.systemUTC());
+    public InvitationService(
+            InvitationRepository repository,
+            IdentityClient identityClient,
+            InvitationTokenCipher tokenCipher) {
+        this(repository, identityClient, tokenCipher, Clock.systemUTC());
     }
 
-    InvitationService(InvitationRepository repository, IdentityClient identityClient, Clock clock) {
+    InvitationService(
+            InvitationRepository repository,
+            IdentityClient identityClient,
+            InvitationTokenCipher tokenCipher,
+            Clock clock) {
         this.repository = repository;
         this.identityClient = identityClient;
+        this.tokenCipher = tokenCipher;
         this.clock = clock;
     }
 
@@ -144,8 +154,16 @@ public class InvitationService {
                     invitation.position(),
                     invitation.restaurantId()));
         } catch (RestClientResponseException exception) {
+            if (exception.getStatusCode().value() == 401) {
+                throw new ApiException(
+                        HttpStatus.UNAUTHORIZED,
+                        "INVALID_CREDENTIALS",
+                        "Неверный логин или пароль.");
+            }
             if (exception.getStatusCode().value() == 409) {
-                throw conflict("ACCOUNT_ALREADY_EXISTS", "Аккаунт с таким логином уже существует.");
+                throw conflict(
+                        "ACCOUNT_LINK_CONFLICT",
+                        "Не удалось привязать существующий аккаунт к ресторану.");
             }
             throw new ApiException(
                     HttpStatus.BAD_GATEWAY,
@@ -181,6 +199,7 @@ public class InvitationService {
                 replacesInvitationId,
                 role,
                 sha256(rawToken),
+                tokenCipher.encrypt(rawToken),
                 expiresAt);
         InvitationRecord invitation = repository.findById(restaurantId, invitationId)
                 .orElseThrow(InvitationService::notFound);
@@ -221,8 +240,12 @@ public class InvitationService {
         }
     }
 
-    private static InvitationResponse response(InvitationRecord invitation, String rawToken) {
-        String content = rawToken == null ? null : INVITATION_PREFIX + rawToken;
+    private InvitationResponse response(InvitationRecord invitation, String rawToken) {
+        String token = rawToken;
+        if (token == null && invitation.tokenCiphertext() != null) {
+            token = tokenCipher.decrypt(invitation.tokenCiphertext());
+        }
+        String content = token == null ? null : INVITATION_PREFIX + token;
         return new InvitationResponse(
                 invitation.id(),
                 invitation.membershipId(),

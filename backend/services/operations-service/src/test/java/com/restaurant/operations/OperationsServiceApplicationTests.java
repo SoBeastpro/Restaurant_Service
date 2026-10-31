@@ -170,7 +170,8 @@ class OperationsServiceApplicationTests {
         mockMvc.perform(get(
                                 "/internal/v1/restaurants/{restaurantId}/active-shift/tables/{tableId}/assignments",
                                 restaurantId,
-                                tableOne))
+                                tableOne)
+                        .header("X-Internal-Api-Key", "local-internal-api-key-change-me"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.managerMembershipId").value(managerMembershipId.toString()))
                 .andExpect(jsonPath("$.waiterMembershipId").value(employeeMembershipId.toString()))
@@ -343,6 +344,77 @@ class OperationsServiceApplicationTests {
                 anyString(),
                 anyString(),
                 anyMap());
+    }
+
+    @Test
+    void shiftStartsWithOneEmployeeWithoutTablesAndManagerSeesCurrentShift() throws Exception {
+        UUID restaurantId = UUID.randomUUID();
+        UUID managerUserId = UUID.randomUUID();
+        UUID managerMembershipId = UUID.randomUUID();
+        UUID employeeMembershipId = UUID.randomUUID();
+        when(workforceClient.findMember(restaurantId, managerUserId)).thenReturn(new MemberReference(
+                managerMembershipId, restaurantId, managerUserId, "MANAGER", null, "ACTIVE"));
+        when(workforceClient.validateEmployees(restaurantId, List.of(employeeMembershipId)))
+                .thenReturn(List.of(new EmployeeAssignmentReference(employeeMembershipId, "WAITER")));
+
+        JsonNode shift = objectMapper.readTree(mockMvc.perform(post(
+                                "/api/v1/restaurants/{restaurantId}/shifts", restaurantId)
+                        .with(managerJwt(managerUserId, restaurantId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "scheduledStartAt":"2026-11-01T07:00:00Z",
+                                  "scheduledEndAt":"2026-11-01T19:00:00Z"
+                                }
+                                """))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString());
+        UUID shiftId = UUID.fromString(shift.get("id").asString());
+        String composition = """
+                {"participants":[{"membershipId":"%s","tableIds":[]}]}
+                """.formatted(employeeMembershipId);
+
+        mockMvc.perform(put(
+                                "/api/v1/restaurants/{restaurantId}/shifts/{shiftId}/participants",
+                                restaurantId,
+                                shiftId)
+                        .with(managerJwt(managerUserId, restaurantId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(composition))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.participants[0].tableIds.length()").value(0));
+
+        mockMvc.perform(post(
+                                "/api/v1/restaurants/{restaurantId}/shifts/{shiftId}/start",
+                                restaurantId,
+                                shiftId)
+                        .with(managerJwt(managerUserId, restaurantId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("ACTIVE"));
+
+        mockMvc.perform(put(
+                                "/api/v1/restaurants/{restaurantId}/shifts/{shiftId}/participants",
+                                restaurantId,
+                                shiftId)
+                        .with(managerJwt(managerUserId, restaurantId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(composition))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("ACTIVE"));
+
+        mockMvc.perform(get("/api/v1/me/current-shift")
+                        .with(managerJwt(managerUserId, restaurantId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(shiftId.toString()))
+                .andExpect(jsonPath("$.participantCount").value(1))
+                .andExpect(jsonPath("$.participants[0].position").value("WAITER"))
+                .andExpect(jsonPath("$.assignedTableIds.length()").value(0));
+
+        org.assertj.core.api.Assertions.assertThat(jdbc.sql(
+                        "SELECT count(*) FROM shifts WHERE restaurant_id = :restaurantId")
+                .param("restaurantId", restaurantId)
+                .query(Long.class)
+                .single()).isEqualTo(1);
     }
 
     @Test

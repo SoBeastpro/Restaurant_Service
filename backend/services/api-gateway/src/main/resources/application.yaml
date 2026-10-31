@@ -52,7 +52,7 @@ spring:
               predicates: ["Path=/api/v1/restaurants/*/shifts/**,/api/v1/restaurants/*/tasks/**,/api/v1/restaurants/*/task-templates/**"]
             - id: workforce
               uri: ${services.workforce.url}
-              predicates: ["Path=/api/v1/restaurants/*/employees/**,/api/v1/restaurants/*/invitations/**"]
+              predicates: ["Path=/api/v1/restaurants/*/team,/api/v1/restaurants/*/employees/**,/api/v1/restaurants/*/invitations/**"]
             - id: restaurant-resources
               uri: ${services.restaurant.url}
               predicates: ["Path=/api/v1/restaurants,/api/v1/restaurants/*,/api/v1/restaurants/*/logo,/api/v1/restaurants/*/halls/**,/api/v1/restaurants/*/tables/**"]

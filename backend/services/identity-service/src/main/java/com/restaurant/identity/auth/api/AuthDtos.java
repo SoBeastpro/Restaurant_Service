@@ -36,7 +36,11 @@ public final class AuthDtos {
     public record AssignRestaurantRequest(@NotNull UUID restaurantId) {
     }
 
-    public record DirectorRestaurantLink(UUID userId, String firstName, String lastName) {
+    public record DirectorRestaurantLink(
+            UUID userId,
+            String firstName,
+            String lastName,
+            TokenPair tokens) {
     }
 
     public record LoginRequest(

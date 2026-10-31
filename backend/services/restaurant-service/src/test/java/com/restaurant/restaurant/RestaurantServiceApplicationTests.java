@@ -10,6 +10,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -18,6 +19,7 @@ import java.util.List;
 
 import com.restaurant.restaurant.setup.infrastructure.IdentityOnboardingClient;
 import com.restaurant.restaurant.setup.infrastructure.IdentityOnboardingClient.DirectorProfile;
+import com.restaurant.restaurant.setup.infrastructure.IdentityOnboardingClient.TokenPair;
 import com.restaurant.restaurant.setup.infrastructure.WorkforceOnboardingClient;
 import com.restaurant.restaurant.status.infrastructure.NotificationClient;
 import com.restaurant.restaurant.status.infrastructure.OperationsTableClient;
@@ -69,7 +71,11 @@ class RestaurantServiceApplicationTests {
     void directorCreatesRestaurantScheduleHallAndPositionedTable() throws Exception {
         UUID directorUserId = UUID.randomUUID();
         when(identityClient.assignRestaurant(any(), any())).thenAnswer(invocation ->
-                new DirectorProfile(invocation.getArgument(0), "Дина", "Директорова"));
+                new DirectorProfile(
+                        invocation.getArgument(0),
+                        "Дина",
+                        "Директорова",
+                        new TokenPair("access", "refresh", "Bearer", 900)));
 
         JsonNode restaurant = objectMapper.readTree(mockMvc.perform(post("/api/v1/restaurants")
                         .with(jwt().jwt(token -> token
@@ -97,6 +103,7 @@ class RestaurantServiceApplicationTests {
                 .andExpect(jsonPath("$.openingHours[4].dayOfWeek").value("FRIDAY"))
                 .andExpect(jsonPath("$.openingHours[4].closesNextDay").value(true))
                 .andExpect(jsonPath("$.openingHours[6].closed").value(true))
+                .andExpect(jsonPath("$.tokens.accessToken").value("access"))
                 .andReturn().getResponse().getContentAsString());
         UUID restaurantId = UUID.fromString(restaurant.get("id").asString());
         verify(workforceClient).createDirector(
@@ -153,9 +160,57 @@ class RestaurantServiceApplicationTests {
         mockMvc.perform(get("/api/v1/restaurants/{restaurantId}/tables", restaurantId)
                         .with(jwt().jwt(token -> token
                                 .subject(directorUserId.toString())
-                                .claim("role", "DIRECTOR"))))
+                                .claim("role", "DIRECTOR")
+                                .claim("restaurant_id", restaurantId.toString()))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1));
+
+        mockMvc.perform(put(
+                                "/api/v1/restaurants/{restaurantId}/halls/{hallId}/layout",
+                                restaurantId,
+                                hallId)
+                        .with(jwt().jwt(token -> token
+                                .subject(directorUserId.toString())
+                                .claim("role", "DIRECTOR")
+                                .claim("restaurant_id", restaurantId.toString())))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "layout":{
+                                    "canvasWidth":1200,
+                                    "canvasHeight":800,
+                                    "items":[{
+                                      "type":"COLUMN",
+                                      "positionX":50,
+                                      "positionY":60,
+                                      "width":40,
+                                      "height":40
+                                    }]
+                                  },
+                                  "tables":[{
+                                    "id":"%s",
+                                    "positionX":240,
+                                    "positionY":130,
+                                    "shape":"RECTANGLE",
+                                    "rotationDegrees":90,
+                                    "enabled":false
+                                  }]
+                                }
+                                """.formatted(tableId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.hall.layout.items[0].type").value("COLUMN"))
+                .andExpect(jsonPath("$.tables[0].rotationDegrees").value(90))
+                .andExpect(jsonPath("$.tables[0].enabled").value(false));
+
+        UUID employeeUserId = UUID.randomUUID();
+        mockMvc.perform(get("/api/v1/restaurants/{restaurantId}/halls/{hallId}", restaurantId, hallId)
+                        .with(employeeJwt(employeeUserId, restaurantId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.layout.canvasWidth").value(1200));
+        mockMvc.perform(get("/api/v1/restaurants/{restaurantId}/tables", restaurantId)
+                        .with(employeeJwt(employeeUserId, restaurantId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(0));
     }
 
     @Test

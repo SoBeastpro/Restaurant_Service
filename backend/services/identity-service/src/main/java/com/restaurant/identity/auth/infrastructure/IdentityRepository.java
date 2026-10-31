@@ -329,6 +329,23 @@ public class IdentityRepository {
                 .update() == 1;
     }
 
+    public boolean attachInvitedUser(UUID userId, UUID restaurantId, String role, String position) {
+        return jdbc.sql("""
+                        UPDATE users
+                        SET restaurant_id = :restaurantId,
+                            role_code = :role,
+                            position_code = :position
+                        WHERE id = :userId
+                          AND status = 'ACTIVE'
+                          AND (restaurant_id IS NULL OR restaurant_id = :restaurantId)
+                        """)
+                .param("userId", userId)
+                .param("restaurantId", restaurantId)
+                .param("role", role)
+                .param("position", position)
+                .update() == 1;
+    }
+
     private static UserRecord mapUser(ResultSet result, int rowNumber) throws SQLException {
         return new UserRecord(
                 result.getObject("id", UUID.class),

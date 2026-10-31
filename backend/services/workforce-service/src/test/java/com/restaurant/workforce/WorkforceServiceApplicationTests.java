@@ -64,10 +64,12 @@ class WorkforceServiceApplicationTests {
                 """.formatted(directorUserId);
 
         mockMvc.perform(post("/internal/v1/restaurants/{restaurantId}/director", restaurantId)
+                        .header("X-Internal-Api-Key", "local-internal-api-key-change-me")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isCreated());
         mockMvc.perform(post("/internal/v1/restaurants/{restaurantId}/director", restaurantId)
+                        .header("X-Internal-Api-Key", "local-internal-api-key-change-me")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isCreated());
@@ -115,6 +117,7 @@ class WorkforceServiceApplicationTests {
                 .andExpect(jsonPath("$.role").value("EMPLOYEE"))
                 .andExpect(jsonPath("$.position").value("WAITER"))
                 .andExpect(jsonPath("$.status").value("PENDING"))
+                .andExpect(jsonPath("$.invitationUrl").value(org.hamcrest.Matchers.startsWith("rest://invite/")))
                 .andReturn().getResponse().getContentAsString());
 
         String originalToken = created.get("qrContent").asString().replace("rest://invite/", "");
@@ -137,6 +140,27 @@ class WorkforceServiceApplicationTests {
         String token = reissued.get("qrContent").asString().replace("rest://invite/", "");
         org.assertj.core.api.Assertions.assertThat(token).isNotEqualTo(originalToken);
 
+        mockMvc.perform(get("/api/v1/restaurants/{restaurantId}/invitations", restaurantId)
+                        .with(jwt().jwt(jwt -> jwt
+                                .subject(directorUserId.toString())
+                                .claim("role", "DIRECTOR")
+                                .claim("restaurant_id", restaurantId.toString()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[*].invitationUrl").value(org.hamcrest.Matchers.everyItem(
+                        org.hamcrest.Matchers.startsWith("rest://invite/"))));
+
+        mockMvc.perform(get("/api/v1/restaurants/{restaurantId}/team", restaurantId)
+                        .with(jwt().jwt(jwt -> jwt
+                                .subject(directorUserId.toString())
+                                .claim("role", "DIRECTOR")
+                                .claim("restaurant_id", restaurantId.toString()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].role").value("DIRECTOR"))
+                .andExpect(jsonPath("$[0].invitationStatus").value("ACCEPTED"))
+                .andExpect(jsonPath("$[1].role").value("EMPLOYEE"))
+                .andExpect(jsonPath("$[1].invitationStatus").value("PENDING"));
+
         mockMvc.perform(get("/api/v1/invitations/{token}", originalToken))
                 .andExpect(status().isGone())
                 .andExpect(jsonPath("$.code").value("INVITATION_REVOKED"));
@@ -153,6 +177,15 @@ class WorkforceServiceApplicationTests {
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.accessToken").value("access-token"));
+
+        mockMvc.perform(get("/api/v1/restaurants/{restaurantId}/team", restaurantId)
+                        .with(jwt().jwt(jwt -> jwt
+                                .subject(directorUserId.toString())
+                                .claim("role", "DIRECTOR")
+                                .claim("restaurant_id", restaurantId.toString()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[1].status").value("ACTIVE"))
+                .andExpect(jsonPath("$[1].invitationStatus").value("ACCEPTED"));
 
         mockMvc.perform(post("/api/v1/invitations/{token}/accept", token)
                         .contentType(MediaType.APPLICATION_JSON)

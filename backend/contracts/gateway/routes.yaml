@@ -47,7 +47,7 @@ routes:
 
   - id: workforce
     owner: workforce-service
-    pathRegex: ^/api/v1/restaurants/[^/]+/(?:employees(?:/[^/]+(?:/(?:status|shifts))?)?|invitations(?:/.*)?)$
+    pathRegex: ^/api/v1/restaurants/[^/]+/(?:team|employees(?:/[^/]+(?:/(?:status|shifts))?)?|invitations(?:/.*)?)$
 
   - id: restaurant-resources
     owner: restaurant-service

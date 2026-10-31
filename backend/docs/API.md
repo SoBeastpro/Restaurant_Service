@@ -34,6 +34,10 @@
 Событийный контракт сервисов описан в
 [`../contracts/events/asyncapi.yaml`](../contracts/events/asyncapi.yaml).
 
+Внутренние маршруты `/internal/v1/**` не публикуются через Gateway и дополнительно требуют
+заголовок `X-Internal-Api-Key`. Все сервисы используют общий секрет `INTERNAL_API_SECRET`;
+запрос без корректного ключа получает `401 INTERNAL_API_KEY_INVALID`.
+
 ## Условные обозначения доступа
 
 | Обозначение | Значение |
@@ -85,11 +89,16 @@
 | `POST` | `/restaurants/{restaurantId}/logo` | Manager | Загрузить логотип |
 | `DELETE` | `/restaurants/{restaurantId}/logo` | Manager | Удалить логотип |
 
+Успешный `POST /restaurants` дополнительно возвращает `tokens` с новой парой
+`accessToken`/`refreshToken`. Новый access token уже содержит `restaurant_id`; фронтенд должен
+заменить им токены onboarding-сессии до первого запроса данных ресторана.
+
 ## Сотрудники
 
 | Метод | Endpoint | Доступ | Назначение |
 |---|---|---|---|
 | `GET` | `/restaurants/{restaurantId}/employees` | Manager | Получить сотрудников с фильтрами |
+| `GET` | `/restaurants/{restaurantId}/team` | Manager | Получить директора, менеджеров, сотрудников и ожидающие приглашения |
 | `GET` | `/restaurants/{restaurantId}/employees/{employeeId}` | Manager | Получить карточку сотрудника |
 | `PATCH` | `/restaurants/{restaurantId}/employees/{employeeId}` | Manager | Изменить имя, фамилию и должность |
 | `PATCH` | `/restaurants/{restaurantId}/employees/{employeeId}/status` | Manager | Изменить статус сотрудника |
@@ -141,6 +150,11 @@
 
 Статусы приглашения: `PENDING`, `ACCEPTED`, `EXPIRED`, `REVOKED`.
 
+Ответы создания и перевыпуска содержат `invitationUrl` формата
+`rest://invite/{token}` и `expiresAt`. Перевыпуск всегда отзывает старый token и создаёт новый.
+В `/team` для каждого участника возвращаются `role`, статус профиля `status` и
+`invitationStatus`; у активных участников `invitationStatus=ACCEPTED`.
+
 ## Залы и столы
 
 | Метод | Endpoint | Доступ | Назначение |
@@ -148,6 +162,7 @@
 | `GET` | `/restaurants/{restaurantId}/halls` | Authenticated | Получить залы ресторана |
 | `POST` | `/restaurants/{restaurantId}/halls` | Manager | Создать зал |
 | `GET` | `/restaurants/{restaurantId}/halls/{hallId}` | Authenticated | Получить зал и его план |
+| `PUT` | `/restaurants/{restaurantId}/halls/{hallId}/layout` | Manager | Атомарно сохранить план и изменённые существующие столы |
 | `PATCH` | `/restaurants/{restaurantId}/halls/{hallId}` | Manager | Изменить зал |
 | `DELETE` | `/restaurants/{restaurantId}/halls/{hallId}` | Manager | Архивировать зал |
 | `GET` | `/restaurants/{restaurantId}/tables` | Authenticated | Получить столы ресторана |
@@ -163,8 +178,55 @@
 Новый стол всегда получает статус `READY`. Из любого состояния разрешён переход в любое другое
 состояние. Для `PROBLEM` непустой комментарий обязателен.
 
-План зала использует автоматическую сетку: backend хранит порядок столов, но не координаты `x/y`.
-Расположение рассчитывает React Native в зависимости от размера экрана.
+Чтение ресторана, залов и столов доступно всем активным ролям ресторана. Изменять план может
+только директор или менеджер. У зала поле `layout` имеет следующий контракт:
+
+```json
+{
+  "canvasWidth": 1200,
+  "canvasHeight": 800,
+  "items": [
+    {
+      "type": "BAR",
+      "positionX": 900,
+      "positionY": 100,
+      "width": 180,
+      "height": 500
+    }
+  ]
+}
+```
+
+Типы интерьерных элементов: `BAR`, `WINDOW`, `ENTRANCE`, `WALL`, `COLUMN`, `PLANT`.
+Столы возвращаются отдельным массивом через `/tables`. Для каждого стола хранятся номер,
+`seatsCount`, `positionX`, `positionY`, `shape`, `rotationDegrees`, `enabled` и рабочий `status`.
+Формы: `ROUND`, `SQUARE`, `RECTANGLE`; поворот: `0` или `90`; число мест: `1..12`.
+Отключённые столы не выдаются сотрудникам и не участвуют в назначениях смены, но остаются видны
+директору и менеджеру.
+
+Пример атомарного сохранения (новые столы этим запросом не создаются):
+
+```json
+{
+  "layout": {
+    "canvasWidth": 1200,
+    "canvasHeight": 800,
+    "items": []
+  },
+  "tables": [
+    {
+      "id": "2c17643d-c1b1-4dad-83c7-dcf62b58c966",
+      "number": "6",
+      "seatsCount": 6,
+      "positionX": 240,
+      "positionY": 540,
+      "shape": "RECTANGLE",
+      "rotationDegrees": 90,
+      "enabled": true
+    }
+  ]
+}
+```
 
 ## Смены и посещаемость
 
@@ -176,6 +238,7 @@
 | `GET` | `/restaurants/{restaurantId}/shifts/{shiftId}` | Authenticated | Получить смену |
 | `PATCH` | `/restaurants/{restaurantId}/shifts/{shiftId}` | Manager | Изменить запланированную смену |
 | `POST` | `/restaurants/{restaurantId}/shifts/{shiftId}/start` | Manager | Начать смену |
+| `PUT` | `/restaurants/{restaurantId}/shifts/{shiftId}/participants` | Manager | Сохранить состав и назначения столов |
 | `POST` | `/restaurants/{restaurantId}/shifts/{shiftId}/close` | Manager | Завершить смену |
 | `GET` | `/restaurants/{restaurantId}/shifts/{shiftId}/report` | Manager | Получить отчёт смены |
 | `GET` | `/restaurants/{restaurantId}/shifts/{shiftId}/participants` | Authenticated | Получить участников смены |
@@ -186,6 +249,16 @@
 
 Статусы смены: `PLANNED`, `ACTIVE`, `CLOSED`, `CANCELLED`.
 Если активная смена уже существует, попытка открыть другую возвращает `409 Conflict`.
+
+Открыть смену можно с одним сотрудником. Участник может не иметь назначенных столов; не требуется
+распределять все активные столы или одновременно назначать официанта и раннера. Состав и
+назначения можно повторно сохранять как в `PLANNED`, так и в `ACTIVE`; повторное сохранение не
+создаёт новую смену. Для участника без столов передаётся `"tableIds": []`.
+
+`GET /me/current-shift` для директора и менеджера ищет активную смену всего ресторана, даже если
+руководитель не включён в состав. Ответ содержит `participantCount`, полный массив `participants`,
+а также персональные `assignedTableIds` и `tasks`. `404 CURRENT_SHIFT_NOT_FOUND` означает только
+то, что активной смены нет (для сотрудника — что он не включён в активную смену).
 
 При закрытии смены менеджер выбирает действие для каждой незавершённой задачи:
 

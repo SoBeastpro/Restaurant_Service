@@ -60,3 +60,6 @@ restaurant:
   outbox:
     enabled: true
 
+internal:
+  api-secret: ${INTERNAL_API_SECRET:local-internal-api-key-change-me}
+

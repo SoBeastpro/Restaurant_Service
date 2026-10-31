@@ -69,14 +69,15 @@ public class InvitationRepository {
             UUID replacesInvitationId,
             String role,
             String tokenHash,
+            String tokenCiphertext,
             Instant expiresAt) {
         jdbc.sql("""
                         INSERT INTO invitations (
                             id, restaurant_id, membership_id, created_by_membership_id,
-                            replaces_invitation_id, role_code, token_hash, expires_at
+                            replaces_invitation_id, role_code, token_hash, token_ciphertext, expires_at
                         ) VALUES (
                             :id, :restaurantId, :membershipId, :creatorMembershipId,
-                            :replacesInvitationId, :role, :tokenHash, :expiresAt
+                            :replacesInvitationId, :role, :tokenHash, :tokenCiphertext, :expiresAt
                         )
                         """)
                 .param("id", invitationId)
@@ -86,6 +87,7 @@ public class InvitationRepository {
                 .param("replacesInvitationId", replacesInvitationId)
                 .param("role", role)
                 .param("tokenHash", tokenHash)
+                .param("tokenCiphertext", tokenCiphertext)
                 .param("expiresAt", OffsetDateTime.ofInstant(expiresAt, ZoneOffset.UTC))
                 .update();
     }
@@ -180,7 +182,8 @@ public class InvitationRepository {
     private static String selectSql() {
         return """
                 SELECT i.id, i.restaurant_id, i.membership_id, i.role_code, i.status,
-                       i.expires_at, m.first_name, m.last_name, m.job_title
+                       i.expires_at, i.token_ciphertext,
+                       m.first_name, m.last_name, m.job_title
                 FROM invitations i
                 JOIN restaurant_members m ON m.id = i.membership_id
                 """;
@@ -196,6 +199,7 @@ public class InvitationRepository {
                 result.getString("role_code"),
                 result.getString("job_title"),
                 result.getString("status"),
+                result.getString("token_ciphertext"),
                 result.getObject("expires_at", OffsetDateTime.class).toInstant());
     }
 
@@ -208,6 +212,7 @@ public class InvitationRepository {
             String role,
             String position,
             String status,
+            String tokenCiphertext,
             Instant expiresAt) {
     }
 

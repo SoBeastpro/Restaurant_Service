@@ -41,14 +41,13 @@ class DatabaseSchemaContractTests {
     @BeforeAll
     static void applyServiceOwnedMigrations() throws IOException, InterruptedException {
         for (DatabaseExpectation database : DATABASES.values()) {
-            String containerPath = "/opt/restaurant/migrations/" + database.name() + ".sql";
+            String containerPath = "/opt/restaurant/migrations/" + database.name();
             ExecResult result = POSTGRES.execInContainer(
-                    "env", "PGPASSWORD=" + database.password(),
-                    "psql", "-h", "127.0.0.1",
-                    "-v", "ON_ERROR_STOP=1",
-                    "-U", database.user(),
-                    "-d", database.name(),
-                    "-f", containerPath);
+                    "sh", "-c", "for migration in " + containerPath + "/*.sql; do "
+                            + "PGPASSWORD='" + database.password() + "' psql -h 127.0.0.1 "
+                            + "-v ON_ERROR_STOP=1 -U '" + database.user() + "' "
+                            + "-d '" + database.name() + "' -f \"$migration\" || exit $?; "
+                            + "done");
             assertEquals(0, result.getExitCode(), result.getStderr());
         }
     }
@@ -214,13 +213,20 @@ class DatabaseSchemaContractTests {
                 MountableFile.forHostPath(databaseBootstrap),
                 "/docker-entrypoint-initdb.d/01-create-service-databases.sql");
         for (DatabaseExpectation database : DATABASES.values()) {
-            Path source = MIGRATION_DIRECTORY.resolve(database.migrationFile());
-            if (!Files.isRegularFile(source)) {
-                throw new IllegalStateException("Service migration not found: " + source);
+            Path source = MIGRATION_DIRECTORY.resolve(database.migrationDirectory());
+            if (!Files.isDirectory(source)) {
+                throw new IllegalStateException("Service migration directory not found: " + source);
             }
-            container.withCopyFileToContainer(
-                    MountableFile.forHostPath(source),
-                    "/opt/restaurant/migrations/" + database.name() + ".sql");
+            try (var migrations = Files.list(source)) {
+                migrations.filter(path -> path.getFileName().toString().endsWith(".sql"))
+                        .sorted()
+                        .forEach(path -> container.withCopyFileToContainer(
+                                MountableFile.forHostPath(path),
+                                "/opt/restaurant/migrations/" + database.name() + "/"
+                                        + path.getFileName()));
+            } catch (IOException exception) {
+                throw new IllegalStateException("Cannot list migrations in " + source, exception);
+            }
         }
         container.withCopyFileToContainer(
                 MountableFile.forHostPath(DEMO_SEED_FILE),
@@ -342,7 +348,7 @@ class DatabaseSchemaContractTests {
                 "identity_db",
                 "identity_app",
                 "identity",
-                "identity-service/src/main/resources/db/migration/V1__identity.sql",
+                "identity-service/src/main/resources/db/migration",
                 Set.of(
                         "contact_verification_tokens", "devices", "inbox_messages", "outbox_events",
                         "password_reset_tokens", "platform_permissions", "platform_role_permissions",
@@ -354,9 +360,9 @@ class DatabaseSchemaContractTests {
                 "restaurant_db",
                 "restaurant_app",
                 "restaurant",
-                "restaurant-service/src/main/resources/db/migration/V1__restaurant.sql",
-                Set.of("dining_tables", "halls", "inbox_messages", "outbox_events", "restaurants",
-                        "table_status_history"),
+                "restaurant-service/src/main/resources/db/migration",
+                Set.of("dining_tables", "halls", "inbox_messages", "outbox_events",
+                        "restaurant_opening_hours", "restaurants", "table_status_history"),
                 Set.of(
                         "halls_restaurant_order_idx", "dining_tables_restaurant_status_idx",
                         "dining_tables_hall_order_idx", "table_status_history_table_created_idx",
@@ -365,7 +371,7 @@ class DatabaseSchemaContractTests {
                 "workforce_db",
                 "workforce_app",
                 "workforce",
-                "workforce-service/src/main/resources/db/migration/V1__workforce.sql",
+                "workforce-service/src/main/resources/db/migration",
                 Set.of(
                         "inbox_messages", "invitations", "member_permission_history",
                         "member_permission_overrides", "outbox_events", "permissions",
@@ -378,10 +384,10 @@ class DatabaseSchemaContractTests {
                 "operations_db",
                 "operations_app",
                 "operations",
-                "operations-service/src/main/resources/db/migration/V1__operations.sql",
+                "operations-service/src/main/resources/db/migration",
                 Set.of(
                         "favorite_task_templates", "inbox_messages", "outbox_events", "shift_participants",
-                        "shift_reports", "shift_task_resolutions", "shifts", "task_history",
+                        "shift_reports", "shift_table_assignments", "shift_task_resolutions", "shifts", "task_history",
                         "task_templates", "tasks"),
                 Set.of(
                         "shifts_one_active_per_restaurant_key", "shifts_restaurant_schedule_idx",
@@ -392,7 +398,7 @@ class DatabaseSchemaContractTests {
                 "billing_db",
                 "billing_app",
                 "billing",
-                "billing-service/src/main/resources/db/migration/V1__billing.sql",
+                "billing-service/src/main/resources/db/migration",
                 Set.of("inbox_messages", "outbox_events", "subscription_events", "subscriptions", "tariff_plans"),
                 Set.of(
                         "subscriptions_one_active_per_restaurant_key", "subscriptions_active_ends_idx",
@@ -401,7 +407,7 @@ class DatabaseSchemaContractTests {
                 "notification_db",
                 "notification_app",
                 "notification",
-                "notification-service/src/main/resources/db/migration/V1__notification.sql",
+                "notification-service/src/main/resources/db/migration",
                 Set.of("delivery_attempts", "inbox_messages", "notifications", "outbox_events",
                         "push_registrations"),
                 Set.of(
@@ -412,7 +418,7 @@ class DatabaseSchemaContractTests {
                 "audit_db",
                 "audit_app",
                 "audit",
-                "audit-service/src/main/resources/db/migration/V1__audit.sql",
+                "audit-service/src/main/resources/db/migration",
                 Set.of("activity_logs", "audit_logs", "inbox_messages", "system_events"),
                 Set.of(
                         "activity_logs_user_created_idx", "audit_logs_restaurant_created_idx",
@@ -422,7 +428,7 @@ class DatabaseSchemaContractTests {
                 "reporting_db",
                 "reporting_app",
                 "reporting",
-                "reporting-service/src/main/resources/db/migration/V1__reporting.sql",
+                "reporting-service/src/main/resources/db/migration",
                 Set.of("employee_daily_metrics", "inbox_messages", "restaurant_daily_metrics",
                         "table_daily_metrics"),
                 Set.of(
@@ -435,7 +441,7 @@ class DatabaseSchemaContractTests {
             String name,
             String user,
             String password,
-            String migrationFile,
+            String migrationDirectory,
             Set<String> tables,
             Set<String> criticalIndexes) {
     }

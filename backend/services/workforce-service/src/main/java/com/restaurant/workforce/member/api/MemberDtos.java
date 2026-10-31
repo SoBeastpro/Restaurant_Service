@@ -19,6 +19,17 @@ public final class MemberDtos {
             String status) {
     }
 
+    public record TeamMemberResponse(
+            UUID membershipId,
+            UUID userId,
+            String firstName,
+            String lastName,
+            String role,
+            String position,
+            String status,
+            String invitationStatus) {
+    }
+
     public record MemberReferenceResponse(
             UUID membershipId,
             UUID restaurantId,

@@ -174,6 +174,7 @@ class IdentityServiceApplicationTests {
         UUID restaurantId = UUID.randomUUID();
 
         JsonNode response = body(mockMvc.perform(post("/internal/v1/users/invitations")
+                        .header("X-Internal-Api-Key", "local-internal-api-key-change-me")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -195,6 +196,41 @@ class IdentityServiceApplicationTests {
         assertThat(jwt.getClaimAsString("role")).isEqualTo("EMPLOYEE");
         assertThat(jwt.getClaimAsString("position")).isEqualTo("WAITER");
         assertThat(jwt.getClaimAsString("restaurant_id")).isEqualTo(restaurantId.toString());
+
+        mockMvc.perform(post("/internal/v1/users/invitations")
+                        .header("X-Internal-Api-Key", "local-internal-api-key-change-me")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "login":"%s",
+                                  "password":"correct-password",
+                                  "firstName":"Анна",
+                                  "lastName":"Соколова",
+                                  "role":"EMPLOYEE",
+                                  "position":"WAITER",
+                                  "restaurantId":"%s"
+                                }
+                                """.formatted(login, restaurantId)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.userId").value(response.get("userId").asString()))
+                .andExpect(jsonPath("$.tokens.accessToken").isNotEmpty());
+
+        mockMvc.perform(post("/internal/v1/users/invitations")
+                        .header("X-Internal-Api-Key", "local-internal-api-key-change-me")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "login":"%s",
+                                  "password":"wrong-password",
+                                  "firstName":"Анна",
+                                  "lastName":"Соколова",
+                                  "role":"EMPLOYEE",
+                                  "position":"WAITER",
+                                  "restaurantId":"%s"
+                                }
+                                """.formatted(login, restaurantId)))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("INVALID_CREDENTIALS"));
     }
 
     @Test
@@ -292,6 +328,7 @@ class IdentityServiceApplicationTests {
         UUID restaurantId = UUID.randomUUID();
 
         mockMvc.perform(post("/internal/v1/users/{userId}/restaurant", userId)
+                        .header("X-Internal-Api-Key", "local-internal-api-key-change-me")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"restaurantId\":\"%s\"}".formatted(restaurantId)))
                 .andExpect(status().isForbidden())
@@ -321,6 +358,7 @@ class IdentityServiceApplicationTests {
                 .andExpect(jsonPath("$.expiresAt").value(firstActivation.get("expiresAt").asString()));
 
         mockMvc.perform(post("/internal/v1/users/{userId}/restaurant", userId)
+                        .header("X-Internal-Api-Key", "local-internal-api-key-change-me")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"restaurantId\":\"%s\"}".formatted(restaurantId)))
                 .andExpect(status().isOk())

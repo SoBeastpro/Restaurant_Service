@@ -28,6 +28,9 @@ public class IdentityOnboardingClient {
     public record AssignRestaurantRequest(UUID restaurantId) {
     }
 
-    public record DirectorProfile(UUID userId, String firstName, String lastName) {
+    public record DirectorProfile(UUID userId, String firstName, String lastName, TokenPair tokens) {
+    }
+
+    public record TokenPair(String accessToken, String refreshToken, String tokenType, long expiresIn) {
     }
 }

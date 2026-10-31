@@ -68,3 +68,6 @@ services:
   notification:
     url: ${NOTIFICATION_SERVICE_URL:http://localhost:8086}
 
+internal:
+  api-secret: ${INTERNAL_API_SECRET:local-internal-api-key-change-me}
+
