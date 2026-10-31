@@ -105,8 +105,22 @@ public class AuthService {
             throw new ApiException(HttpStatus.BAD_REQUEST, "RESTAURANT_REQUIRED", "Ресторан обязателен.");
         }
         ensureBcryptLength(request.password());
-        if (repository.accountExists(login)) {
-            throw conflict("ACCOUNT_ALREADY_EXISTS", "Аккаунт с таким логином уже существует.");
+        UserRecord existing = repository.findUserByLogin(login).orElse(null);
+        if (existing != null) {
+            ensureActive(existing.status());
+            if (!passwordEncoder.matches(request.password(), existing.passwordHash())) {
+                throw invalidCredentials();
+            }
+            if (existing.restaurantId() != null && !existing.restaurantId().equals(request.restaurantId())) {
+                throw conflict(
+                        "ACCOUNT_ALREADY_IN_OTHER_RESTAURANT",
+                        "Аккаунт уже привязан к другому ресторану.");
+            }
+            if (!repository.attachInvitedUser(existing.id(), request.restaurantId(), role, position)) {
+                throw conflict("ACCOUNT_LINK_FAILED", "Не удалось привязать аккаунт к ресторану.");
+            }
+            UserRecord attached = requiredUser(existing.id());
+            return new InvitedRegistrationResult(attached.id(), createSession(attached, context));
         }
         try {
             UUID userId = repository.insertUser(
@@ -125,7 +139,7 @@ public class AuthService {
     }
 
     @Transactional
-    public DirectorRestaurantLink assignRestaurant(UUID userId, UUID restaurantId) {
+    public DirectorRestaurantLink assignRestaurant(UUID userId, UUID restaurantId, RequestContext context) {
         UserRecord user = requiredUser(userId);
         if (!"DIRECTOR".equals(user.role())) {
             throw new ApiException(
@@ -147,7 +161,12 @@ public class AuthService {
         if (!repository.assignRestaurant(userId, restaurantId)) {
             throw conflict("RESTAURANT_ASSIGNMENT_FAILED", "Не удалось связать аккаунт с рестораном.");
         }
-        return new DirectorRestaurantLink(user.id(), user.firstName(), user.lastName());
+        UserRecord linked = requiredUser(userId);
+        return new DirectorRestaurantLink(
+                linked.id(),
+                linked.firstName(),
+                linked.lastName(),
+                createSession(linked, context));
     }
 
     @Transactional(noRollbackFor = ApiException.class)

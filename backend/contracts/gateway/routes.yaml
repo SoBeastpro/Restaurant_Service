@@ -31,7 +31,7 @@ routes:
 
   - id: reporting
     owner: reporting-service
-    pathRegex: ^/api/v1/restaurants/[^/]+/(?:statistics(?:/.*)?|employees/[^/]+/statistics)$
+    pathRegex: ^/api/v1/(?:restaurants/[^/]+/(?:statistics(?:/.*)?|employees/[^/]+/statistics)|platform/metrics)$
 
   - id: audit
     owner: audit-service
@@ -39,7 +39,7 @@ routes:
 
   - id: billing
     owner: billing-service
-    pathRegex: ^/api/v1/(?:restaurants/[^/]+/subscription(?:/.*)?|platform/subscriptions)$
+    pathRegex: ^/api/v1/(?:restaurants/[^/]+/subscription(?:/.*)?|platform/(?:subscriptions|tariffs)(?:/.*)?)$
 
   - id: operations
     owner: operations-service
@@ -47,7 +47,7 @@ routes:
 
   - id: workforce
     owner: workforce-service
-    pathRegex: ^/api/v1/restaurants/[^/]+/(?:employees(?:/[^/]+(?:/(?:status|shifts))?)?|invitations(?:/.*)?)$
+    pathRegex: ^/api/v1/restaurants/[^/]+/(?:team|employees(?:/[^/]+(?:/(?:status|shifts))?)?|invitations(?:/.*)?)$
 
   - id: restaurant-resources
     owner: restaurant-service

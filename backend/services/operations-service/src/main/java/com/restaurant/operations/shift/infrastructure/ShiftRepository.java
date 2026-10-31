@@ -81,21 +81,38 @@ public class ShiftRepository {
                 .optional();
     }
 
+    public Optional<ShiftRecord> findActiveShift(UUID restaurantId) {
+        return jdbc.sql(shiftSql() + """
+                         WHERE restaurant_id = :restaurantId
+                           AND status = 'ACTIVE'
+                        """)
+                .param("restaurantId", restaurantId)
+                .query(ShiftRepository::mapShift)
+                .optional();
+    }
+
     public void clearConfiguration(UUID shiftId) {
         jdbc.sql("DELETE FROM shift_participants WHERE shift_id = :shiftId")
                 .param("shiftId", shiftId)
                 .update();
     }
 
-    public void insertParticipant(UUID restaurantId, UUID shiftId, UUID membershipId, UUID actorMembershipId) {
+    public void insertParticipant(
+            UUID restaurantId,
+            UUID shiftId,
+            UUID membershipId,
+            String position,
+            UUID actorMembershipId) {
         jdbc.sql("""
                         INSERT INTO shift_participants (
-                            restaurant_id, shift_id, membership_id, added_by_membership_id
-                        ) VALUES (:restaurantId, :shiftId, :membershipId, :actor)
+                            restaurant_id, shift_id, membership_id, position_snapshot,
+                            added_by_membership_id
+                        ) VALUES (:restaurantId, :shiftId, :membershipId, :position, :actor)
                         """)
                 .param("restaurantId", restaurantId)
                 .param("shiftId", shiftId)
                 .param("membershipId", membershipId)
+                .param("position", position)
                 .param("actor", actorMembershipId)
                 .update();
     }
@@ -127,7 +144,8 @@ public class ShiftRepository {
 
     public List<ParticipantRecord> findParticipants(UUID shiftId) {
         return jdbc.sql("""
-                        SELECT participant.membership_id, assignment.assignment_role, assignment.table_id
+                        SELECT participant.membership_id, participant.position_snapshot,
+                               assignment.assignment_role, assignment.table_id
                         FROM shift_participants participant
                         LEFT JOIN shift_table_assignments assignment
                           ON assignment.shift_id = participant.shift_id
@@ -138,7 +156,9 @@ public class ShiftRepository {
                 .param("shiftId", shiftId)
                 .query((result, rowNumber) -> new ParticipantRecord(
                         result.getObject("membership_id", UUID.class),
-                        result.getString("assignment_role"),
+                        result.getString("position_snapshot") == null
+                                ? result.getString("assignment_role")
+                                : result.getString("position_snapshot"),
                         result.getObject("table_id", UUID.class)))
                 .list();
     }

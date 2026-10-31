@@ -56,7 +56,17 @@ logging:
   pattern:
     level: "%5p [service:${spring.application.name}] [requestId:%X{requestId:-}]"
 
+restaurant:
+  outbox:
+    enabled: true
+
 services:
   identity:
     url: ${IDENTITY_SERVICE_URL:http://localhost:8081}
+
+internal:
+  api-secret: ${INTERNAL_API_SECRET:local-internal-api-key-change-me}
+
+invitation:
+  token-encryption-secret: ${INVITATION_TOKEN_ENCRYPTION_SECRET:${INTERNAL_API_SECRET:local-internal-api-key-change-me}}
 

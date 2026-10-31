@@ -23,3 +23,6 @@ logging:
     format:
       console: ecs
 
+internal:
+  api-secret: ${INTERNAL_API_SECRET}
+

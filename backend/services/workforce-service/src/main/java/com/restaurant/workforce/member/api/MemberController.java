@@ -2,6 +2,7 @@ package com.restaurant.workforce.member.api;
 
 import static com.restaurant.workforce.member.api.MemberDtos.EmployeeResponse;
 import static com.restaurant.workforce.member.api.MemberDtos.MemberReferenceResponse;
+import static com.restaurant.workforce.member.api.MemberDtos.TeamMemberResponse;
 import static com.restaurant.workforce.member.api.MemberDtos.ValidateEmployeesRequest;
 import static com.restaurant.workforce.member.api.MemberDtos.ValidateEmployeesResponse;
 
@@ -39,6 +40,14 @@ class MemberController {
             @AuthenticationPrincipal Jwt jwt) {
         requireRestaurantClaim(jwt, restaurantId);
         return service.listEmployees(restaurantId, UUID.fromString(jwt.getSubject()));
+    }
+
+    @GetMapping("/api/v1/restaurants/{restaurantId}/team")
+    List<TeamMemberResponse> listTeam(
+            @PathVariable UUID restaurantId,
+            @AuthenticationPrincipal Jwt jwt) {
+        requireRestaurantClaim(jwt, restaurantId);
+        return service.listTeam(restaurantId, UUID.fromString(jwt.getSubject()));
     }
 
     @GetMapping("/internal/v1/restaurants/{restaurantId}/members/by-user/{userId}")

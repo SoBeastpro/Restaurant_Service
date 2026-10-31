@@ -4,7 +4,9 @@ import static com.restaurant.restaurant.setup.api.SetupDtos.CreateHallRequest;
 import static com.restaurant.restaurant.setup.api.SetupDtos.CreateRestaurantRequest;
 import static com.restaurant.restaurant.setup.api.SetupDtos.CreateTableRequest;
 import static com.restaurant.restaurant.setup.api.SetupDtos.HallResponse;
+import static com.restaurant.restaurant.setup.api.SetupDtos.HallLayoutResponse;
 import static com.restaurant.restaurant.setup.api.SetupDtos.RestaurantResponse;
+import static com.restaurant.restaurant.setup.api.SetupDtos.SaveHallLayoutRequest;
 import static com.restaurant.restaurant.setup.api.SetupDtos.TableResponse;
 import static com.restaurant.restaurant.setup.api.SetupDtos.UpdateTableRequest;
 
@@ -25,6 +27,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.PutMapping;
 
 import jakarta.validation.Valid;
 
@@ -51,7 +54,7 @@ class RestaurantSetupController {
 
     @GetMapping("/restaurants/{restaurantId}")
     RestaurantResponse getRestaurant(@PathVariable UUID restaurantId, @AuthenticationPrincipal Jwt jwt) {
-        requireEditorClaim(jwt, restaurantId);
+        requireReaderClaim(jwt, restaurantId);
         return service.getRestaurant(restaurantId, userId(jwt), role(jwt));
     }
 
@@ -67,7 +70,7 @@ class RestaurantSetupController {
 
     @GetMapping("/restaurants/{restaurantId}/halls")
     List<HallResponse> listHalls(@PathVariable UUID restaurantId, @AuthenticationPrincipal Jwt jwt) {
-        requireEditorClaim(jwt, restaurantId);
+        requireReaderClaim(jwt, restaurantId);
         return service.listHalls(restaurantId, userId(jwt), role(jwt));
     }
 
@@ -76,7 +79,7 @@ class RestaurantSetupController {
             @PathVariable UUID restaurantId,
             @PathVariable UUID hallId,
             @AuthenticationPrincipal Jwt jwt) {
-        requireEditorClaim(jwt, restaurantId);
+        requireReaderClaim(jwt, restaurantId);
         return service.getHall(restaurantId, hallId, userId(jwt), role(jwt));
     }
 
@@ -93,7 +96,7 @@ class RestaurantSetupController {
 
     @GetMapping("/restaurants/{restaurantId}/tables")
     List<TableResponse> listTables(@PathVariable UUID restaurantId, @AuthenticationPrincipal Jwt jwt) {
-        requireEditorClaim(jwt, restaurantId);
+        requireReaderClaim(jwt, restaurantId);
         return service.listTables(restaurantId, userId(jwt), role(jwt));
     }
 
@@ -102,8 +105,18 @@ class RestaurantSetupController {
             @PathVariable UUID restaurantId,
             @PathVariable UUID tableId,
             @AuthenticationPrincipal Jwt jwt) {
-        requireEditorClaim(jwt, restaurantId);
+        requireReaderClaim(jwt, restaurantId);
         return service.getTable(restaurantId, tableId, userId(jwt), role(jwt));
+    }
+
+    @PutMapping("/restaurants/{restaurantId}/halls/{hallId}/layout")
+    HallLayoutResponse saveHallLayout(
+            @PathVariable UUID restaurantId,
+            @PathVariable UUID hallId,
+            @AuthenticationPrincipal Jwt jwt,
+            @Valid @RequestBody SaveHallLayoutRequest request) {
+        requireEditorClaim(jwt, restaurantId);
+        return service.saveHallLayout(restaurantId, hallId, userId(jwt), role(jwt), request);
     }
 
     @PatchMapping("/restaurants/{restaurantId}/tables/{tableId}")
@@ -122,6 +135,14 @@ class RestaurantSetupController {
             return;
         }
         if ("MANAGER".equals(role)
+                && restaurantId.toString().equals(jwt.getClaimAsString("restaurant_id"))) {
+            return;
+        }
+        throw forbidden();
+    }
+
+    private static void requireReaderClaim(Jwt jwt, UUID restaurantId) {
+        if (List.of("DIRECTOR", "MANAGER", "EMPLOYEE").contains(role(jwt))
                 && restaurantId.toString().equals(jwt.getClaimAsString("restaurant_id"))) {
             return;
         }

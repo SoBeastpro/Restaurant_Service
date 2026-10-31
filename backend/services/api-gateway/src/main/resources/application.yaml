@@ -40,19 +40,19 @@ spring:
               predicates: ["Path=/api/v1/invitations/**"]
             - id: reporting
               uri: ${services.reporting.url}
-              predicates: ["Path=/api/v1/restaurants/*/statistics/**,/api/v1/restaurants/*/employees/*/statistics"]
+              predicates: ["Path=/api/v1/restaurants/*/statistics/**,/api/v1/restaurants/*/employees/*/statistics,/api/v1/platform/metrics"]
             - id: audit
               uri: ${services.audit.url}
               predicates: ["Path=/api/v1/restaurants/*/audit-log,/api/v1/platform/audit-log,/api/v1/platform/system-events"]
             - id: billing
               uri: ${services.billing.url}
-              predicates: ["Path=/api/v1/restaurants/*/subscription/**,/api/v1/platform/subscriptions"]
+              predicates: ["Path=/api/v1/restaurants/*/subscription/**,/api/v1/platform/subscriptions,/api/v1/platform/subscriptions/**,/api/v1/platform/tariffs,/api/v1/platform/tariffs/**"]
             - id: operations
               uri: ${services.operations.url}
               predicates: ["Path=/api/v1/restaurants/*/shifts/**,/api/v1/restaurants/*/tasks/**,/api/v1/restaurants/*/task-templates/**"]
             - id: workforce
               uri: ${services.workforce.url}
-              predicates: ["Path=/api/v1/restaurants/*/employees/**,/api/v1/restaurants/*/invitations/**"]
+              predicates: ["Path=/api/v1/restaurants/*/team,/api/v1/restaurants/*/employees/**,/api/v1/restaurants/*/invitations/**"]
             - id: restaurant-resources
               uri: ${services.restaurant.url}
               predicates: ["Path=/api/v1/restaurants,/api/v1/restaurants/*,/api/v1/restaurants/*/logo,/api/v1/restaurants/*/halls/**,/api/v1/restaurants/*/tables/**"]
@@ -97,4 +97,7 @@ info:
 logging:
   pattern:
     level: "%5p [service:${spring.application.name}] [requestId:%X{requestId:-}]"
+
+internal:
+  api-secret: ${INTERNAL_API_SECRET:local-internal-api-key-change-me}
 

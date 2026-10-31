@@ -118,7 +118,8 @@ public class RestaurantSetupRepository {
 
     public Optional<HallRecord> findHall(UUID restaurantId, UUID hallId) {
         return jdbc.sql("""
-                        SELECT id, restaurant_id, name, display_order, status
+                        SELECT id, restaurant_id, name, display_order, status,
+                               layout_settings::text AS layout_settings
                         FROM halls
                         WHERE restaurant_id = :restaurantId AND id = :hallId AND status = 'ACTIVE'
                         """)
@@ -130,7 +131,8 @@ public class RestaurantSetupRepository {
 
     public List<HallRecord> findHalls(UUID restaurantId) {
         return jdbc.sql("""
-                        SELECT id, restaurant_id, name, display_order, status
+                        SELECT id, restaurant_id, name, display_order, status,
+                               layout_settings::text AS layout_settings
                         FROM halls
                         WHERE restaurant_id = :restaurantId AND status = 'ACTIVE'
                         ORDER BY display_order, created_at
@@ -184,6 +186,43 @@ public class RestaurantSetupRepository {
                 .list();
     }
 
+    public List<TableRecord> findEnabledTables(UUID restaurantId) {
+        return jdbc.sql(tableSql() + """
+                 WHERE restaurant_id = :restaurantId
+                   AND archived_at IS NULL
+                   AND is_enabled = TRUE
+                 ORDER BY display_order, created_at
+                """)
+                .param("restaurantId", restaurantId)
+                .query(RestaurantSetupRepository::mapTable)
+                .list();
+    }
+
+    public List<TableRecord> findTablesByHall(UUID restaurantId, UUID hallId) {
+        return jdbc.sql(tableSql() + """
+                 WHERE restaurant_id = :restaurantId
+                   AND hall_id = :hallId
+                   AND archived_at IS NULL
+                 ORDER BY display_order, created_at
+                """)
+                .param("restaurantId", restaurantId)
+                .param("hallId", hallId)
+                .query(RestaurantSetupRepository::mapTable)
+                .list();
+    }
+
+    public void updateHallLayout(UUID restaurantId, UUID hallId, String layoutJson) {
+        jdbc.sql("""
+                        UPDATE halls
+                        SET layout_settings = CAST(:layout AS jsonb)
+                        WHERE restaurant_id = :restaurantId AND id = :hallId AND status = 'ACTIVE'
+                        """)
+                .param("layout", layoutJson)
+                .param("restaurantId", restaurantId)
+                .param("hallId", hallId)
+                .update();
+    }
+
     public List<UUID> findActiveTableIds(UUID restaurantId, List<UUID> tableIds) {
         if (tableIds.isEmpty()) {
             return List.of();
@@ -194,6 +233,7 @@ public class RestaurantSetupRepository {
                         WHERE restaurant_id = :restaurantId
                           AND id IN (:tableIds)
                           AND archived_at IS NULL
+                          AND is_enabled = TRUE
                         ORDER BY id
                         """)
                 .param("restaurantId", restaurantId)
@@ -208,6 +248,7 @@ public class RestaurantSetupRepository {
                         FROM dining_tables
                         WHERE restaurant_id = :restaurantId
                           AND archived_at IS NULL
+                          AND is_enabled = TRUE
                         ORDER BY id
                         """)
                 .param("restaurantId", restaurantId)
@@ -222,7 +263,10 @@ public class RestaurantSetupRepository {
                             seats_count = :seatsCount,
                             position_x = :positionX,
                             position_y = :positionY,
-                            shape = :shape
+                            shape = :shape,
+                            status = :status,
+                            rotation_degrees = :rotationDegrees,
+                            is_enabled = :enabled
                         WHERE id = :id AND restaurant_id = :restaurantId AND archived_at IS NULL
                         """)
                 .param("number", table.number())
@@ -230,6 +274,9 @@ public class RestaurantSetupRepository {
                 .param("positionX", table.positionX())
                 .param("positionY", table.positionY())
                 .param("shape", table.shape())
+                .param("status", table.status())
+                .param("rotationDegrees", table.rotationDegrees())
+                .param("enabled", table.enabled())
                 .param("id", table.id())
                 .param("restaurantId", table.restaurantId())
                 .update();
@@ -238,7 +285,8 @@ public class RestaurantSetupRepository {
     private static String tableSql() {
         return """
                 SELECT id, restaurant_id, hall_id, number, seats_count,
-                       position_x, position_y, shape, status
+                       position_x, position_y, shape, status,
+                       rotation_degrees, is_enabled
                 FROM dining_tables
                 """;
     }
@@ -249,7 +297,8 @@ public class RestaurantSetupRepository {
                 result.getObject("restaurant_id", UUID.class),
                 result.getString("name"),
                 result.getInt("display_order"),
-                result.getString("status"));
+                result.getString("status"),
+                result.getString("layout_settings"));
     }
 
     private static TableRecord mapTable(ResultSet result, int rowNumber) throws SQLException {
@@ -262,7 +311,9 @@ public class RestaurantSetupRepository {
                 result.getBigDecimal("position_x"),
                 result.getBigDecimal("position_y"),
                 result.getString("shape"),
-                result.getString("status"));
+                result.getString("status"),
+                result.getInt("rotation_degrees"),
+                result.getBoolean("is_enabled"));
     }
 
     private static Instant instant(ResultSet result, String column) throws SQLException {
@@ -286,7 +337,13 @@ public class RestaurantSetupRepository {
             boolean closesNextDay) {
     }
 
-    public record HallRecord(UUID id, UUID restaurantId, String name, int displayOrder, String status) {
+    public record HallRecord(
+            UUID id,
+            UUID restaurantId,
+            String name,
+            int displayOrder,
+            String status,
+            String layoutJson) {
     }
 
     public record TableRecord(
@@ -298,6 +355,8 @@ public class RestaurantSetupRepository {
             BigDecimal positionX,
             BigDecimal positionY,
             String shape,
-            String status) {
+            String status,
+            int rotationDegrees,
+            boolean enabled) {
     }
 }

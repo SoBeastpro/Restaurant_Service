@@ -24,12 +24,19 @@
 | статистика | `reporting-service` |
 | `/platform/users/**` | `identity-service` |
 | `/platform/restaurants/**` | `restaurant-service` |
+| `/platform/tariffs/**`, `/platform/subscriptions/**` | `billing-service` |
+| `/platform/metrics` | `reporting-service` |
+| `/platform/audit-log`, `/platform/system-events` | `audit-service` |
 | составные read-only `/me/**` | композиция в Gateway |
 
 Все изменяющие состояние запросы должны поддерживать `Idempotency-Key`; Gateway прокидывает
 `X-Request-Id` и W3C `traceparent`. Повторять автоматически разрешено только безопасные запросы.
 Событийный контракт сервисов описан в
 [`../contracts/events/asyncapi.yaml`](../contracts/events/asyncapi.yaml).
+
+Внутренние маршруты `/internal/v1/**` не публикуются через Gateway и дополнительно требуют
+заголовок `X-Internal-Api-Key`. Все сервисы используют общий секрет `INTERNAL_API_SECRET`;
+запрос без корректного ключа получает `401 INTERNAL_API_KEY_INVALID`.
 
 ## Условные обозначения доступа
 
@@ -39,7 +46,7 @@
 | Authenticated | Любой авторизованный пользователь |
 | Manager | Менеджер ресторана |
 | Employee | Официант или раннер (или другой сотрудник)    |
-| Platform admin | Системная поддержка (будет реализована позднее) |
+| Platform admin | Пользователь с `SYSTEM_ADMIN` в JWT claim `platform_roles` |
 | TBD | Будет уточнено после утверждения permissions |
 
 ## Авторизация и сессии
@@ -82,11 +89,16 @@
 | `POST` | `/restaurants/{restaurantId}/logo` | Manager | Загрузить логотип |
 | `DELETE` | `/restaurants/{restaurantId}/logo` | Manager | Удалить логотип |
 
+Успешный `POST /restaurants` дополнительно возвращает `tokens` с новой парой
+`accessToken`/`refreshToken`. Новый access token уже содержит `restaurant_id`; фронтенд должен
+заменить им токены onboarding-сессии до первого запроса данных ресторана.
+
 ## Сотрудники
 
 | Метод | Endpoint | Доступ | Назначение |
 |---|---|---|---|
 | `GET` | `/restaurants/{restaurantId}/employees` | Manager | Получить сотрудников с фильтрами |
+| `GET` | `/restaurants/{restaurantId}/team` | Manager | Получить директора, менеджеров, сотрудников и ожидающие приглашения |
 | `GET` | `/restaurants/{restaurantId}/employees/{employeeId}` | Manager | Получить карточку сотрудника |
 | `PATCH` | `/restaurants/{restaurantId}/employees/{employeeId}` | Manager | Изменить имя, фамилию и должность |
 | `PATCH` | `/restaurants/{restaurantId}/employees/{employeeId}/status` | Manager | Изменить статус сотрудника |
@@ -138,6 +150,11 @@
 
 Статусы приглашения: `PENDING`, `ACCEPTED`, `EXPIRED`, `REVOKED`.
 
+Ответы создания и перевыпуска содержат `invitationUrl` формата
+`rest://invite/{token}` и `expiresAt`. Перевыпуск всегда отзывает старый token и создаёт новый.
+В `/team` для каждого участника возвращаются `role`, статус профиля `status` и
+`invitationStatus`; у активных участников `invitationStatus=ACCEPTED`.
+
 ## Залы и столы
 
 | Метод | Endpoint | Доступ | Назначение |
@@ -145,6 +162,7 @@
 | `GET` | `/restaurants/{restaurantId}/halls` | Authenticated | Получить залы ресторана |
 | `POST` | `/restaurants/{restaurantId}/halls` | Manager | Создать зал |
 | `GET` | `/restaurants/{restaurantId}/halls/{hallId}` | Authenticated | Получить зал и его план |
+| `PUT` | `/restaurants/{restaurantId}/halls/{hallId}/layout` | Manager | Атомарно сохранить план и изменённые существующие столы |
 | `PATCH` | `/restaurants/{restaurantId}/halls/{hallId}` | Manager | Изменить зал |
 | `DELETE` | `/restaurants/{restaurantId}/halls/{hallId}` | Manager | Архивировать зал |
 | `GET` | `/restaurants/{restaurantId}/tables` | Authenticated | Получить столы ресторана |
@@ -160,8 +178,55 @@
 Новый стол всегда получает статус `READY`. Из любого состояния разрешён переход в любое другое
 состояние. Для `PROBLEM` непустой комментарий обязателен.
 
-План зала использует автоматическую сетку: backend хранит порядок столов, но не координаты `x/y`.
-Расположение рассчитывает React Native в зависимости от размера экрана.
+Чтение ресторана, залов и столов доступно всем активным ролям ресторана. Изменять план может
+только директор или менеджер. У зала поле `layout` имеет следующий контракт:
+
+```json
+{
+  "canvasWidth": 1200,
+  "canvasHeight": 800,
+  "items": [
+    {
+      "type": "BAR",
+      "positionX": 900,
+      "positionY": 100,
+      "width": 180,
+      "height": 500
+    }
+  ]
+}
+```
+
+Типы интерьерных элементов: `BAR`, `WINDOW`, `ENTRANCE`, `WALL`, `COLUMN`, `PLANT`.
+Столы возвращаются отдельным массивом через `/tables`. Для каждого стола хранятся номер,
+`seatsCount`, `positionX`, `positionY`, `shape`, `rotationDegrees`, `enabled` и рабочий `status`.
+Формы: `ROUND`, `SQUARE`, `RECTANGLE`; поворот: `0` или `90`; число мест: `1..12`.
+Отключённые столы не выдаются сотрудникам и не участвуют в назначениях смены, но остаются видны
+директору и менеджеру.
+
+Пример атомарного сохранения (новые столы этим запросом не создаются):
+
+```json
+{
+  "layout": {
+    "canvasWidth": 1200,
+    "canvasHeight": 800,
+    "items": []
+  },
+  "tables": [
+    {
+      "id": "2c17643d-c1b1-4dad-83c7-dcf62b58c966",
+      "number": "6",
+      "seatsCount": 6,
+      "positionX": 240,
+      "positionY": 540,
+      "shape": "RECTANGLE",
+      "rotationDegrees": 90,
+      "enabled": true
+    }
+  ]
+}
+```
 
 ## Смены и посещаемость
 
@@ -173,6 +238,7 @@
 | `GET` | `/restaurants/{restaurantId}/shifts/{shiftId}` | Authenticated | Получить смену |
 | `PATCH` | `/restaurants/{restaurantId}/shifts/{shiftId}` | Manager | Изменить запланированную смену |
 | `POST` | `/restaurants/{restaurantId}/shifts/{shiftId}/start` | Manager | Начать смену |
+| `PUT` | `/restaurants/{restaurantId}/shifts/{shiftId}/participants` | Manager | Сохранить состав и назначения столов |
 | `POST` | `/restaurants/{restaurantId}/shifts/{shiftId}/close` | Manager | Завершить смену |
 | `GET` | `/restaurants/{restaurantId}/shifts/{shiftId}/report` | Manager | Получить отчёт смены |
 | `GET` | `/restaurants/{restaurantId}/shifts/{shiftId}/participants` | Authenticated | Получить участников смены |
@@ -183,6 +249,16 @@
 
 Статусы смены: `PLANNED`, `ACTIVE`, `CLOSED`, `CANCELLED`.
 Если активная смена уже существует, попытка открыть другую возвращает `409 Conflict`.
+
+Открыть смену можно с одним сотрудником. Участник может не иметь назначенных столов; не требуется
+распределять все активные столы или одновременно назначать официанта и раннера. Состав и
+назначения можно повторно сохранять как в `PLANNED`, так и в `ACTIVE`; повторное сохранение не
+создаёт новую смену. Для участника без столов передаётся `"tableIds": []`.
+
+`GET /me/current-shift` для директора и менеджера ищет активную смену всего ресторана, даже если
+руководитель не включён в состав. Ответ содержит `participantCount`, полный массив `participants`,
+а также персональные `assignedTableIds` и `tasks`. `404 CURRENT_SHIFT_NOT_FOUND` означает только
+то, что активной смены нет (для сотрудника — что он не включён в активную смену).
 
 При закрытии смены менеджер выбирает действие для каждой незавершённой задачи:
 
@@ -274,17 +350,49 @@ React Native не подключается напрямую к RabbitMQ. RabbitM
 
 ## Системная поддержка
 
-Этот блок обязателен, но будет реализован позднее под `/api/v1/platform`.
+Все методы доступны только пользователю с ролью `SYSTEM_ADMIN` в JWT claim `platform_roles`.
+Списки пользователей, ресторанов, подписок, аудита и событий используют нумерацию страниц с нуля;
+максимальный `size` равен 100. Удаление тарифа означает архивирование: исторические подписки
+остаются связаны с ним. В метриках по умолчанию возвращаются последние 30 календарных дней,
+максимальный период — один год.
 
 | Метод | Endpoint | Доступ | Назначение |
 |---|---|---|---|
 | `GET` | `/platform/restaurants` | Platform admin | Получить рестораны платформы |
+| `GET` | `/platform/restaurants/{restaurantId}` | Platform admin | Получить карточку ресторана |
 | `PATCH` | `/platform/restaurants/{restaurantId}/status` | Platform admin | Заблокировать или разблокировать ресторан |
 | `GET` | `/platform/users` | Platform admin | Получить пользователей платформы |
+| `GET` | `/platform/users/{userId}` | Platform admin | Получить карточку пользователя |
 | `PATCH` | `/platform/users/{userId}/status` | Platform admin | Заблокировать или разблокировать пользователя |
-| `GET` | `/platform/subscriptions` | Platform admin | Получить подписки |
+| `GET` | `/platform/tariffs` | Platform admin | Получить тарифы |
+| `POST` | `/platform/tariffs` | Platform admin | Создать тариф |
+| `GET` | `/platform/tariffs/{tariffId}` | Platform admin | Получить тариф |
+| `PATCH` | `/platform/tariffs/{tariffId}` | Platform admin | Изменить или восстановить тариф |
+| `DELETE` | `/platform/tariffs/{tariffId}` | Platform admin | Архивировать тариф |
+| `GET` | `/platform/subscriptions` | Platform admin | Получить подписки с фильтрами |
+| `POST` | `/platform/subscriptions` | Platform admin | Активировать подписку ресторана |
+| `GET` | `/platform/subscriptions/{subscriptionId}` | Platform admin | Получить подписку |
+| `POST` | `/platform/subscriptions/{subscriptionId}/extend` | Platform admin | Продлить активную подписку |
+| `POST` | `/platform/subscriptions/{subscriptionId}/cancel` | Platform admin | Отменить активную подписку |
+| `GET` | `/platform/metrics` | Platform admin | Получить агрегированные метрики за период |
 | `GET` | `/platform/audit-log` | Platform admin | Получить журнал платформы |
 | `GET` | `/platform/system-events` | Platform admin | Получить технические события |
+
+Статусы пользователей и ресторанов: `ACTIVE`, `BLOCKED`, `ARCHIVED`. Архивированный ресторан
+нельзя вернуть в работу. Системный администратор не может заблокировать или архивировать свой
+аккаунт. Блокировка пользователя отзывает все его активные сессии. Для ресторанных endpoint'ов
+API Gateway проверяет актуальный статус ресторана и не пропускает запросы заблокированного или
+архивированного ресторана.
+
+Статусы подписки: `ACTIVE`, `EXPIRED`, `CANCELLED`. У ресторана одновременно может быть только
+одна активная подписка. Продление и отмена применяются только к активной подписке. Способ
+активации — `STUB` или `PAYMENT_PROVIDER`; пока платёжный провайдер не подключён, клиент отправляет
+`STUB` или не передаёт поле вовсе.
+
+Перед активацией подписки billing-service проверяет существование ресторана и запрещает активацию
+для архивированного ресторана. Платформенные метрики объединяют живые счётчики identity,
+restaurant и billing с событийной витриной операционной активности. Доменные события из outbox
+доставляются через RabbitMQ в audit-service и reporting-service идемпотентными consumer'ами.
 
 ## Общие HTTP-ответы
 

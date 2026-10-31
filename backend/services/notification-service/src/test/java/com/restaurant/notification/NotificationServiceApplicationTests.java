@@ -39,6 +39,7 @@ class NotificationServiceApplicationTests {
         UUID userId = UUID.randomUUID();
         UUID restaurantId = UUID.randomUUID();
         String response = mockMvc.perform(post("/internal/v1/notifications")
+                        .header("X-Internal-Api-Key", "local-internal-api-key-change-me")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {

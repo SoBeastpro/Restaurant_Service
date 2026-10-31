@@ -6,7 +6,6 @@ import java.util.UUID;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
@@ -25,7 +24,7 @@ public final class ShiftDtos {
 
     public record ParticipantRequest(
             @NotNull UUID membershipId,
-            @NotEmpty List<@NotNull UUID> tableIds) {
+            @NotNull List<@NotNull UUID> tableIds) {
     }
 
     public record CreateTaskRequest(
@@ -134,6 +133,8 @@ public final class ShiftDtos {
             Instant scheduledEndAt,
             Instant actualStartedAt,
             String status,
+            int participantCount,
+            List<ParticipantResponse> participants,
             List<UUID> assignedTableIds,
             List<TaskResponse> tasks) {
     }

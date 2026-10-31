@@ -97,7 +97,7 @@ public class ShiftService {
             ConfigureShiftRequest request) {
         MemberReference actor = requireManager(restaurantId, actorUserId);
         ShiftRecord shift = requiredShiftForUpdate(restaurantId, shiftId);
-        requireDraft(shift);
+        requireConfigurable(shift);
 
         List<UUID> employeeIds = request.participants().stream()
                 .map(ParticipantRequest::membershipId)
@@ -118,13 +118,20 @@ public class ShiftService {
                 EmployeeAssignmentReference::membershipId,
                 employee -> employee.position().strip().toUpperCase(Locale.ROOT)));
         Map<String, List<UUID>> tablesByPosition = new LinkedHashMap<>();
+        Set<UUID> allAssignedTables = new LinkedHashSet<>();
         for (ParticipantRequest participant : request.participants()) {
             String position = positions.get(participant.membershipId());
-            if (!List.of("WAITER", "RUNNER").contains(position)) {
-                throw validation("Для работы со столами должность сотрудника должна быть WAITER или RUNNER.");
+            if (!participant.tableIds().isEmpty()) {
+                if (!List.of("WAITER", "RUNNER").contains(position)) {
+                    throw new ApiException(
+                            HttpStatus.BAD_REQUEST,
+                            "TABLE_ASSIGNMENT_POSITION_REQUIRED",
+                            "Столы можно закреплять только за официантом или раннером.");
+                }
+                tablesByPosition.computeIfAbsent(position, ignored -> new ArrayList<>())
+                        .addAll(participant.tableIds());
+                allAssignedTables.addAll(participant.tableIds());
             }
-            tablesByPosition.computeIfAbsent(position, ignored -> new ArrayList<>())
-                    .addAll(participant.tableIds());
         }
         for (Map.Entry<String, List<UUID>> entry : tablesByPosition.entrySet()) {
             if (new LinkedHashSet<>(entry.getValue()).size() != entry.getValue().size()) {
@@ -134,14 +141,8 @@ public class ShiftService {
                         "Один стол нельзя закрепить за двумя сотрудниками одной должности.");
             }
         }
-        Set<UUID> waiterTables = new LinkedHashSet<>(tablesByPosition.getOrDefault("WAITER", List.of()));
-        Set<UUID> runnerTables = new LinkedHashSet<>(tablesByPosition.getOrDefault("RUNNER", List.of()));
-        if (waiterTables.isEmpty() || !waiterTables.equals(runnerTables)) {
-            throw validation("Каждый стол смены должен быть закреплён отдельно за одним официантом и одним раннером.");
-        }
-        validateTables(restaurantId, List.copyOf(waiterTables));
-        if (!waiterTables.equals(new LinkedHashSet<>(activeTables(restaurantId)))) {
-            throw validation("Перед открытием смены распределите все активные столы между официантами и раннерами.");
+        if (!allAssignedTables.isEmpty()) {
+            validateTables(restaurantId, List.copyOf(allAssignedTables));
         }
 
         repository.clearConfiguration(shiftId);
@@ -150,6 +151,7 @@ public class ShiftService {
                     restaurantId,
                     shiftId,
                     participant.membershipId(),
+                    positions.get(participant.membershipId()),
                     actor.membershipId());
             for (UUID tableId : participant.tableIds()) {
                 repository.insertTableAssignment(
@@ -170,10 +172,10 @@ public class ShiftService {
         ShiftRecord shift = requiredShiftForUpdate(restaurantId, shiftId);
         requireDraft(shift);
         if (repository.countParticipants(shiftId) == 0) {
-            throw validation("Перед открытием смены добавьте хотя бы одного сотрудника.");
-        }
-        if (repository.hasParticipantsWithoutTables(shiftId)) {
-            throw validation("Перед открытием смены закрепите хотя бы один стол за каждым сотрудником.");
+            throw new ApiException(
+                    HttpStatus.BAD_REQUEST,
+                    "SHIFT_PARTICIPANT_REQUIRED",
+                    "Перед открытием смены добавьте хотя бы одного сотрудника.");
         }
         try {
             repository.startShift(restaurantId, shiftId, actor.membershipId());
@@ -452,11 +454,15 @@ public class ShiftService {
     @Transactional(readOnly = true)
     public CurrentShiftResponse current(UUID restaurantId, UUID userId) {
         MemberReference member = requireMember(restaurantId, userId);
-        ShiftRecord shift = repository.findActiveShiftForMember(restaurantId, member.membershipId())
+        boolean management = List.of("DIRECTOR", "MANAGER").contains(member.role());
+        ShiftRecord shift = (management
+                ? repository.findActiveShift(restaurantId)
+                : repository.findActiveShiftForMember(restaurantId, member.membershipId()))
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.NOT_FOUND,
                         "CURRENT_SHIFT_NOT_FOUND",
-                        "У сотрудника сейчас нет открытой смены."));
+                        "Сейчас нет открытой смены."));
+        List<ParticipantResponse> participants = participants(shift.id());
         return new CurrentShiftResponse(
                 shift.id(),
                 shift.restaurantId(),
@@ -464,6 +470,8 @@ public class ShiftService {
                 shift.scheduledEndAt(),
                 shift.actualStartedAt(),
                 shift.status(),
+                participants.size(),
+                participants,
                 repository.findAssignedTables(shift.id(), member.membershipId()),
                 repository.findPersonalPlan(shift.id(), member.membershipId()).stream()
                         .map(ShiftService::task)
@@ -471,21 +479,7 @@ public class ShiftService {
     }
 
     private ShiftResponse response(ShiftRecord shift) {
-        Map<UUID, List<UUID>> assignedTables = new LinkedHashMap<>();
-        Map<UUID, String> positions = new LinkedHashMap<>();
-        for (ParticipantRecord participant : repository.findParticipants(shift.id())) {
-            assignedTables.computeIfAbsent(participant.membershipId(), ignored -> new ArrayList<>());
-            positions.putIfAbsent(participant.membershipId(), participant.position());
-            if (participant.tableId() != null) {
-                assignedTables.get(participant.membershipId()).add(participant.tableId());
-            }
-        }
-        List<ParticipantResponse> participants = assignedTables.entrySet().stream()
-                .map(entry -> new ParticipantResponse(
-                        entry.getKey(),
-                        positions.get(entry.getKey()),
-                        List.copyOf(entry.getValue())))
-                .toList();
+        List<ParticipantResponse> participants = participants(shift.id());
         return new ShiftResponse(
                 shift.id(),
                 shift.restaurantId(),
@@ -498,6 +492,24 @@ public class ShiftService {
                 shift.responsibleMembershipId(),
                 participants,
                 repository.findShiftTasks(shift.id()).stream().map(ShiftService::task).toList());
+    }
+
+    private List<ParticipantResponse> participants(UUID shiftId) {
+        Map<UUID, List<UUID>> assignedTables = new LinkedHashMap<>();
+        Map<UUID, String> positions = new LinkedHashMap<>();
+        for (ParticipantRecord participant : repository.findParticipants(shiftId)) {
+            assignedTables.computeIfAbsent(participant.membershipId(), ignored -> new ArrayList<>());
+            positions.putIfAbsent(participant.membershipId(), participant.position());
+            if (participant.tableId() != null) {
+                assignedTables.get(participant.membershipId()).add(participant.tableId());
+            }
+        }
+        return assignedTables.entrySet().stream()
+                .map(entry -> new ParticipantResponse(
+                        entry.getKey(),
+                        positions.get(entry.getKey()),
+                        List.copyOf(entry.getValue())))
+                .toList();
     }
 
     private MemberReference requireManager(UUID restaurantId, UUID userId) {
@@ -542,14 +554,6 @@ public class ShiftService {
             }
         } catch (RestClientException exception) {
             throw validation("Можно закрепить только активные столы этого ресторана.");
-        }
-    }
-
-    private List<UUID> activeTables(UUID restaurantId) {
-        try {
-            return restaurantClient.activeTables(restaurantId);
-        } catch (RestClientException exception) {
-            throw validation("Не удалось получить список активных столов ресторана.");
         }
     }
 
@@ -647,6 +651,14 @@ public class ShiftService {
     private static void requireDraft(ShiftRecord shift) {
         if (!"PLANNED".equals(shift.status())) {
             throw conflict("SHIFT_NOT_DRAFT", "Изменять состав и столы можно только в черновике смены.");
+        }
+    }
+
+    private static void requireConfigurable(ShiftRecord shift) {
+        if (!List.of("PLANNED", "ACTIVE").contains(shift.status())) {
+            throw conflict(
+                    "SHIFT_NOT_CONFIGURABLE",
+                    "Состав и столы можно менять только в запланированной или открытой смене.");
         }
     }
 

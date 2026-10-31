@@ -8,6 +8,7 @@ import com.restaurant.foundation.web.ApiException;
 import com.restaurant.workforce.member.api.MemberDtos.EmployeeResponse;
 import com.restaurant.workforce.member.api.MemberDtos.EmployeeAssignmentResponse;
 import com.restaurant.workforce.member.api.MemberDtos.MemberReferenceResponse;
+import com.restaurant.workforce.member.api.MemberDtos.TeamMemberResponse;
 import com.restaurant.workforce.member.infrastructure.MemberRepository;
 
 import org.springframework.http.HttpStatus;
@@ -30,6 +31,15 @@ public class MemberService {
             throw forbidden();
         }
         return repository.findActiveEmployees(restaurantId);
+    }
+
+    @Transactional(readOnly = true)
+    public List<TeamMemberResponse> listTeam(UUID restaurantId, UUID actorUserId) {
+        MemberReferenceResponse actor = requireActiveMember(restaurantId, actorUserId);
+        if (!List.of("DIRECTOR", "MANAGER").contains(actor.role())) {
+            throw forbidden();
+        }
+        return repository.findTeam(restaurantId);
     }
 
     @Transactional(readOnly = true)

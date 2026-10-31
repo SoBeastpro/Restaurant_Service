@@ -7,6 +7,7 @@ import java.util.UUID;
 import com.restaurant.workforce.member.api.MemberDtos.EmployeeResponse;
 import com.restaurant.workforce.member.api.MemberDtos.EmployeeAssignmentResponse;
 import com.restaurant.workforce.member.api.MemberDtos.MemberReferenceResponse;
+import com.restaurant.workforce.member.api.MemberDtos.TeamMemberResponse;
 
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
@@ -98,6 +99,45 @@ public class MemberRepository {
                         result.getString("last_name"),
                         result.getString("job_title"),
                         result.getString("status")))
+                .list();
+    }
+
+    public List<TeamMemberResponse> findTeam(UUID restaurantId) {
+        return jdbc.sql("""
+                        SELECT member.id, member.user_id, member.first_name, member.last_name,
+                               member.role_code, member.job_title, member.status,
+                               CASE
+                                   WHEN member.status = 'ACTIVE' THEN 'ACCEPTED'
+                                   ELSE invitation.status
+                               END AS invitation_status
+                        FROM restaurant_members member
+                        LEFT JOIN LATERAL (
+                            SELECT status
+                            FROM invitations
+                            WHERE membership_id = member.id
+                            ORDER BY created_at DESC
+                            LIMIT 1
+                        ) invitation ON TRUE
+                        WHERE member.restaurant_id = :restaurantId
+                          AND member.status <> 'ARCHIVED'
+                        ORDER BY
+                          CASE member.role_code
+                              WHEN 'DIRECTOR' THEN 1
+                              WHEN 'MANAGER' THEN 2
+                              ELSE 3
+                          END,
+                          member.last_name, member.first_name, member.id
+                        """)
+                .param("restaurantId", restaurantId)
+                .query((result, rowNumber) -> new TeamMemberResponse(
+                        result.getObject("id", UUID.class),
+                        result.getObject("user_id", UUID.class),
+                        result.getString("first_name"),
+                        result.getString("last_name"),
+                        result.getString("role_code"),
+                        result.getString("job_title"),
+                        result.getString("status"),
+                        result.getString("invitation_status")))
                 .list();
     }
 

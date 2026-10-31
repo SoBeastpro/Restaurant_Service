@@ -41,7 +41,11 @@ class InternalUserController {
     @PostMapping("/{userId}/restaurant")
     DirectorRestaurantLink assignRestaurant(
             @PathVariable java.util.UUID userId,
-            @Valid @RequestBody AssignRestaurantRequest request) {
-        return authService.assignRestaurant(userId, request.restaurantId());
+            @Valid @RequestBody AssignRestaurantRequest request,
+            HttpServletRequest httpRequest) {
+        return authService.assignRestaurant(
+                userId,
+                request.restaurantId(),
+                new RequestContext(httpRequest.getRemoteAddr(), "restaurant-service"));
     }
 }

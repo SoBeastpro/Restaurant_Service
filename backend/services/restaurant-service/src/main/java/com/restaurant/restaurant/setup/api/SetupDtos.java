@@ -47,7 +47,15 @@ public final class SetupDtos {
             String address,
             String status,
             List<OpeningHoursResponse> openingHours,
-            Instant createdAt) {
+            Instant createdAt,
+            TokenPair tokens) {
+    }
+
+    public record TokenPair(
+            String accessToken,
+            String refreshToken,
+            String tokenType,
+            long expiresIn) {
     }
 
     public record CreateHallRequest(
@@ -60,12 +68,47 @@ public final class SetupDtos {
             UUID restaurantId,
             String name,
             int displayOrder,
-            String status) {
+            String status,
+            HallLayout layout) {
+    }
+
+    public record HallLayout(
+            @Min(1) int canvasWidth,
+            @Min(1) int canvasHeight,
+            @NotNull List<@Valid HallLayoutItem> items) {
+    }
+
+    public record HallLayoutItem(
+            @NotBlank String type,
+            @NotNull @DecimalMin("0.0") BigDecimal positionX,
+            @NotNull @DecimalMin("0.0") BigDecimal positionY,
+            @NotNull @DecimalMin(value = "0.0", inclusive = false) BigDecimal width,
+            @NotNull @DecimalMin(value = "0.0", inclusive = false) BigDecimal height) {
+    }
+
+    public record SaveHallLayoutRequest(
+            @NotNull @Valid HallLayout layout,
+            @NotNull List<@Valid HallTableUpdate> tables) {
+    }
+
+    public record HallTableUpdate(
+            @NotNull UUID id,
+            @Size(min = 1, max = 20) String number,
+            @Min(1) @Max(12) Integer seatsCount,
+            @DecimalMin("0.0") BigDecimal positionX,
+            @DecimalMin("0.0") BigDecimal positionY,
+            String shape,
+            String status,
+            Integer rotationDegrees,
+            Boolean enabled) {
+    }
+
+    public record HallLayoutResponse(HallResponse hall, List<TableResponse> tables) {
     }
 
     public record CreateTableRequest(
             @NotBlank @Size(max = 20) String number,
-            @Min(1) @Max(100) int seatsCount,
+            @Min(1) @Max(12) int seatsCount,
             @NotNull @DecimalMin("0.0") BigDecimal positionX,
             @NotNull @DecimalMin("0.0") BigDecimal positionY,
             @NotBlank String shape) {
@@ -73,7 +116,7 @@ public final class SetupDtos {
 
     public record UpdateTableRequest(
             @Size(min = 1, max = 20) String number,
-            @Min(1) @Max(100) Integer seatsCount,
+            @Min(1) @Max(12) Integer seatsCount,
             @DecimalMin("0.0") BigDecimal positionX,
             @DecimalMin("0.0") BigDecimal positionY,
             String shape) {
@@ -88,6 +131,8 @@ public final class SetupDtos {
             BigDecimal positionX,
             BigDecimal positionY,
             String shape,
-            String status) {
+            String status,
+            int rotationDegrees,
+            boolean enabled) {
     }
 }

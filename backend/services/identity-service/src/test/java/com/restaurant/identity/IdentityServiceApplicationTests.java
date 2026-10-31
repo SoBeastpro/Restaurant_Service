@@ -1,7 +1,9 @@
 package com.restaurant.identity;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -9,6 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.util.UUID;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -171,6 +174,7 @@ class IdentityServiceApplicationTests {
         UUID restaurantId = UUID.randomUUID();
 
         JsonNode response = body(mockMvc.perform(post("/internal/v1/users/invitations")
+                        .header("X-Internal-Api-Key", "local-internal-api-key-change-me")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -192,12 +196,112 @@ class IdentityServiceApplicationTests {
         assertThat(jwt.getClaimAsString("role")).isEqualTo("EMPLOYEE");
         assertThat(jwt.getClaimAsString("position")).isEqualTo("WAITER");
         assertThat(jwt.getClaimAsString("restaurant_id")).isEqualTo(restaurantId.toString());
+
+        mockMvc.perform(post("/internal/v1/users/invitations")
+                        .header("X-Internal-Api-Key", "local-internal-api-key-change-me")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "login":"%s",
+                                  "password":"correct-password",
+                                  "firstName":"Анна",
+                                  "lastName":"Соколова",
+                                  "role":"EMPLOYEE",
+                                  "position":"WAITER",
+                                  "restaurantId":"%s"
+                                }
+                                """.formatted(login, restaurantId)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.userId").value(response.get("userId").asString()))
+                .andExpect(jsonPath("$.tokens.accessToken").isNotEmpty());
+
+        mockMvc.perform(post("/internal/v1/users/invitations")
+                        .header("X-Internal-Api-Key", "local-internal-api-key-change-me")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "login":"%s",
+                                  "password":"wrong-password",
+                                  "firstName":"Анна",
+                                  "lastName":"Соколова",
+                                  "role":"EMPLOYEE",
+                                  "position":"WAITER",
+                                  "restaurantId":"%s"
+                                }
+                                """.formatted(login, restaurantId)))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("INVALID_CREDENTIALS"));
     }
 
     @Test
     void protectedEndpointsRejectMissingToken() throws Exception {
         mockMvc.perform(get("/api/v1/me"))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void systemAdminListsAndBlocksPlatformUser() throws Exception {
+        UUID adminId = UUID.randomUUID();
+        UUID targetId = UUID.randomUUID();
+        jdbc.sql("""
+                        INSERT INTO users (
+                            id, login, password_hash, first_name, last_name, role_code, status
+                        ) VALUES (
+                            :id, :login, '{bcrypt}unused', 'Иван', 'Сотрудник', 'DIRECTOR', 'ACTIVE'
+                        )
+                        """)
+                .param("id", targetId)
+                .param("login", "platform-user-" + targetId)
+                .update();
+
+        mockMvc.perform(get("/api/v1/platform/users")
+                        .param("query", "Иван Сотрудник")
+                        .with(systemAdmin(adminId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].id").value(targetId.toString()));
+
+        mockMvc.perform(patch("/api/v1/platform/users/{userId}/status", targetId)
+                        .with(systemAdmin(adminId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"blocked\",\"reason\":\"проверка\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("BLOCKED"));
+
+        assertThat(jdbc.sql("SELECT COUNT(*) FROM outbox_events WHERE aggregate_id = :id")
+                .param("id", targetId)
+                .query(Long.class)
+                .single()).isEqualTo(1);
+
+        mockMvc.perform(get("/internal/v1/platform/metrics-summary"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("INTERNAL_API_KEY_INVALID"));
+        mockMvc.perform(get("/internal/v1/platform/metrics-summary")
+                        .header("X-Internal-Api-Key", "local-internal-api-key-change-me"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.blocked").value(org.hamcrest.Matchers.greaterThanOrEqualTo(1)));
+    }
+
+    @Test
+    void systemAdminCannotBlockOwnAccount() throws Exception {
+        UUID adminId = UUID.randomUUID();
+        jdbc.sql("""
+                        INSERT INTO users (
+                            id, login, password_hash, first_name, last_name, role_code, status
+                        ) VALUES (
+                            :id, :login, '{bcrypt}unused', 'Системный', 'Администратор', 'SYSTEM_ADMIN', 'ACTIVE'
+                        )
+                        """)
+                .param("id", adminId)
+                .param("login", "platform-admin-" + adminId)
+                .update();
+
+        mockMvc.perform(patch("/api/v1/platform/users/{userId}/status", adminId)
+                        .with(systemAdmin(adminId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"BLOCKED\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("SYSTEM_ADMIN_SELF_BLOCK_FORBIDDEN"));
     }
 
     @Test
@@ -224,6 +328,7 @@ class IdentityServiceApplicationTests {
         UUID restaurantId = UUID.randomUUID();
 
         mockMvc.perform(post("/internal/v1/users/{userId}/restaurant", userId)
+                        .header("X-Internal-Api-Key", "local-internal-api-key-change-me")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"restaurantId\":\"%s\"}".formatted(restaurantId)))
                 .andExpect(status().isForbidden())
@@ -253,6 +358,7 @@ class IdentityServiceApplicationTests {
                 .andExpect(jsonPath("$.expiresAt").value(firstActivation.get("expiresAt").asString()));
 
         mockMvc.perform(post("/internal/v1/users/{userId}/restaurant", userId)
+                        .header("X-Internal-Api-Key", "local-internal-api-key-change-me")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"restaurantId\":\"%s\"}".formatted(restaurantId)))
                 .andExpect(status().isOk())
@@ -270,5 +376,11 @@ class IdentityServiceApplicationTests {
 
     private JsonNode body(String json) {
         return objectMapper.readTree(json);
+    }
+
+    private static org.springframework.test.web.servlet.request.RequestPostProcessor systemAdmin(UUID userId) {
+        return jwt().jwt(token -> token
+                .subject(userId.toString())
+                .claim("platform_roles", List.of("SYSTEM_ADMIN")));
     }
 }
