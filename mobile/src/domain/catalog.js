@@ -65,7 +65,7 @@ export function permissionsFor(role) {
     };
   }
   if (role === "WAITER") {
-    return { tableStatuses: ["NEEDS_CLEANING", "NEEDS_SERVING"], ownTablesOnly: true };
+    return { tableStatuses: ["NEEDS_CLEANING", "NEEDS_SERVING", "PROBLEM"], ownTablesOnly: true };
   }
   if (role === "RUNNER") {
     return { tableStatuses: ["READY"], ownTablesOnly: false };

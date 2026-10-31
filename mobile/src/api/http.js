@@ -1,9 +1,20 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { paths } from "./paths";
 
 const TOKEN_KEY = "rest.tokens";
 
 let accessToken = null;
 let refreshToken = null;
+let expiresIn = null;
+
+export class ApiError extends Error {
+  constructor(message, { status = 0, code = null } = {}) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.code = code;
+  }
+}
 
 export function apiBase() {
   return process.env.EXPO_PUBLIC_API_URL?.replace(/\/$/, "") || "";
@@ -17,14 +28,28 @@ export function getAccessToken() {
   return accessToken;
 }
 
+export function getTokens() {
+  return accessToken ? { accessToken, refreshToken, expiresIn } : null;
+}
+
 export function setTokens(next) {
   accessToken = next?.accessToken ?? null;
   refreshToken = next?.refreshToken ?? null;
+  expiresIn = next?.expiresIn ?? null;
+}
+
+async function storeRefreshed(next) {
+  setTokens(next);
+  try {
+    await AsyncStorage.setItem(TOKEN_KEY, JSON.stringify(next));
+  } catch {
+    // Токены уже в памяти; запись повторится при следующем сохранении сессии.
+  }
 }
 
 export async function refreshSession() {
   if (!refreshToken) {
-    throw new Error("Нет сессии.");
+    throw new ApiError("Нет сессии.", { status: 401 });
   }
   const next = await request(paths.refresh, {
     method: "POST",
@@ -33,9 +58,9 @@ export async function refreshSession() {
     retry: false,
   });
   if (!next?.accessToken) {
-    throw new Error("Не удалось обновить сессию.");
+    throw new ApiError("Не удалось обновить сессию.", { status: 401 });
   }
-  setTokens(next);
+  await storeRefreshed(next);
   return next;
 }
 
@@ -59,7 +84,8 @@ export async function saveTokens(storage, next) {
 }
 
 function messageFromBody(body, fallback) {
-  const firstError = Array.isArray(body?.errors) ? body.errors[0] : null;
+  const list = Array.isArray(body?.violations) ? body.violations : body?.errors;
+  const firstError = Array.isArray(list) ? list[0] : null;
   return (
     firstError?.defaultMessage ||
     firstError?.message ||
@@ -70,10 +96,20 @@ function messageFromBody(body, fallback) {
   );
 }
 
+function fallbackMessage(status) {
+  if (status >= 500) {
+    return `Сервер не отвечает как надо (${status}). Попробуйте позже.`;
+  }
+  if (status === 403) {
+    return "Нет доступа.";
+  }
+  return `Сервер ответил ${status}.`;
+}
+
 export async function request(path, { method = "GET", body, auth = true, retry = true } = {}) {
   const base = apiBase();
   if (!base) {
-    throw new Error("Сервер не задан.");
+    throw new ApiError("Сервер не задан.");
   }
   const headers = { Accept: "application/json" };
   if (body !== undefined) {
@@ -82,11 +118,16 @@ export async function request(path, { method = "GET", body, auth = true, retry =
   if (auth && accessToken) {
     headers.Authorization = `Bearer ${accessToken}`;
   }
-  const response = await fetch(`${base}${path}`, {
-    method,
-    headers,
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
+  let response;
+  try {
+    response = await fetch(`${base}${path}`, {
+      method,
+      headers,
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+  } catch {
+    throw new ApiError("Нет связи с сервером. Проверьте интернет.");
+  }
   if (response.status === 401 && retry && refreshToken && path !== paths.refresh) {
     const refreshed = await request(paths.refresh, {
       method: "POST",
@@ -95,7 +136,7 @@ export async function request(path, { method = "GET", body, auth = true, retry =
       retry: false,
     });
     if (refreshed?.accessToken) {
-      setTokens(refreshed);
+      await storeRefreshed(refreshed);
       return request(path, { method, body, auth, retry: false });
     }
   }
@@ -112,7 +153,10 @@ export async function request(path, { method = "GET", body, auth = true, retry =
     }
   }
   if (!response.ok) {
-    throw new Error(messageFromBody(payload, `Сервер ответил ${response.status}.`));
+    throw new ApiError(messageFromBody(payload, fallbackMessage(response.status)), {
+      status: response.status,
+      code: payload?.code ?? payload?.errorCode ?? null,
+    });
   }
   return payload;
 }

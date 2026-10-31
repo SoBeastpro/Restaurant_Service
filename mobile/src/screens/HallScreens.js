@@ -4,8 +4,10 @@ import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { TABLE_STATUSES, canSetTableStatus, statusLabel } from "../domain/catalog";
 import { formatClock, formatDay } from "../domain/format";
+import { plannedRunnerId, plannedWaiterId } from "../domain/shift";
+import { samePerson } from "../domain/view";
 import { api, userName } from "../api/store";
-import { Choice, Metric, TableTile } from "../components/blocks";
+import { Choice, Metric, Problems, TableTile } from "../components/blocks";
 import { colors, radius, shadow, space, statusTint, type as font } from "../theme";
 import { useRestaurant } from "../useRestaurant";
 import { firstError, hallName as hallNameError, problemComment, seatCount, seatsLabel, tableNumber } from "../validation";
@@ -69,7 +71,15 @@ export function HallScreen() {
       <View style={styles.top}>
         <View style={styles.flex}>
           <Title>{manager ? data.me.venue : staffTitle}</Title>
-          <Lead>{manager ? (data.shift ? "Смена идёт" : "Смена ещё не открыта") : "Мой зал"}</Lead>
+          <Lead>
+            {manager
+              ? data.shift
+                ? "Смена идёт"
+                : data.draftShift
+                  ? "Смена в черновике, ещё не начата"
+                  : "Смена ещё не открыта"
+              : "Мой зал"}
+          </Lead>
         </View>
         <Pressable
           accessibilityRole="button"
@@ -87,9 +97,10 @@ export function HallScreen() {
           ) : null}
         </Pressable>
       </View>
+      <Problems items={data.problems} />
       {manager ? (
         <View style={styles.metrics}>
-          <Metric value={String(data.onShift.length)} label="Сотрудники" onPress={() => navigation.navigate("Shift")} />
+          <Metric value={String(data.onShiftCount)} label="Сотрудники" onPress={() => navigation.navigate("Shift")} />
           <Metric value={`${done}/${data.todayTasks.length}`} label="Задачи" onPress={() => navigation.navigate("Tasks")} />
           <Metric value={String(attention)} label="Внимание" />
         </View>
@@ -102,7 +113,9 @@ export function HallScreen() {
         </View>
       ) : null}
       {activeHall ? <Text style={styles.section}>{activeHall.name}</Text> : null}
-      {manager && !data.shift ? <Button label="Открыть смену" onPress={() => navigation.navigate("ShiftOpen")} /> : null}
+      {manager && !data.shift ? (
+        <Button label={data.draftShift ? "Продолжить смену" : "Открыть смену"} onPress={() => navigation.navigate("ShiftOpen")} />
+      ) : null}
       <View style={styles.grid}>
         {tables.map((table) => (
           <TableTile
@@ -203,8 +216,23 @@ export function TableEditScreen({ route, navigation }) {
   );
 }
 
+function assignmentLine(label, people, savedId, plannedId) {
+  const saved = people.find((person) => samePerson(person, savedId));
+  const planned = people.find((person) => samePerson(person, plannedId));
+  const text = saved ? `${label}: ${saved.fullName}` : `${label} не закреплён`;
+  if (String(savedId ?? "") === String(plannedId ?? "")) {
+    return text;
+  }
+  return `${text}. Черновик: ${planned ? planned.fullName : "снять"} — не сохранён, пока вы не сохраните состав смены.`;
+}
+
 export function TableScreen({ route, navigation }) {
   const data = useRestaurant();
+  useFocusEffect(
+    useCallback(() => {
+      void api.refresh();
+    }, []),
+  );
   const table =
     data?.allTables.find((item) => item.id === route.params.tableId) ??
     data?.tables.find((item) => item.id === route.params.tableId);
@@ -216,14 +244,16 @@ export function TableScreen({ route, navigation }) {
       <Screen>
         <BackLink onPress={() => navigation.goBack()} />
         <Title>Стол не найден</Title>
+        <Problems items={data?.problems} />
       </Screen>
     );
   }
-  const assignee = data.people.find((person) => person.id === table.assigneeId);
-  const runner = data.people.find((person) => person.id === table.runnerId);
+  const waiterId = plannedWaiterId(table);
+  const runnerId = plannedRunnerId(table);
   const allowed = TABLE_STATUSES.filter((status) => canSetTableStatus(data.me, table, status.id));
   const waiters = data.people.filter((person) => person.role === "WAITER" || person.position === "WAITER");
   const runners = data.people.filter((person) => person.role === "RUNNER" || person.position === "RUNNER");
+  const editable = !data.shift;
 
   async function apply(status, note) {
     try {
@@ -248,8 +278,9 @@ export function TableScreen({ route, navigation }) {
           </Lead>
         </View>
       </View>
-      <Text style={styles.line}>{assignee ? `Официант: ${assignee.fullName}` : "Официант не закреплён"}</Text>
-      <Text style={styles.line}>{runner ? `Раннер: ${runner.fullName}` : "Раннер не закреплён"}</Text>
+      <Problems items={data.problems} />
+      <Text style={styles.line}>{assignmentLine("Официант", data.people, table.assigneeId, waiterId)}</Text>
+      <Text style={styles.line}>{assignmentLine("Раннер", data.people, table.runnerId, runnerId)}</Text>
       {error ? <Text style={styles.error}>{error}</Text> : null}
       <View style={styles.wrap}>
         {allowed.map((status) => (
@@ -271,17 +302,23 @@ export function TableScreen({ route, navigation }) {
           </Pressable>
         ))}
       </View>
-      {data.me.role === "MANAGER" ? (
+      {data.me.role === "MANAGER" && !editable ? (
+        <Lead>После старта смены закрепление столов не меняется.</Lead>
+      ) : null}
+      {data.me.role === "MANAGER" && editable ? (
         <View style={styles.stack}>
           <Text style={styles.section}>Закрепить</Text>
-          <Lead>Сотрудник должен принять приглашение. На смене каждый стол нужен и официанту, и раннеру.</Lead>
+          <Lead>
+            Сотрудник должен принять приглашение. Каждый стол нужен и официанту, и раннеру. Выбор — черновик: он
+            сохранится кнопкой «Сохранить состав» и пропадёт при перезапуске приложения.
+          </Lead>
           <Text style={styles.line}>Официанты</Text>
           <View style={styles.wrap}>
             {waiters.map((person) => (
               <AssignChip
                 key={person.id}
                 person={person}
-                selected={table.assigneeId === person.id}
+                selected={samePerson(person, waiterId)}
                 onPress={async () => {
                   try {
                     await api.assignTable({ actorId: data.me.id, tableId: table.id, assigneeId: person.id });
@@ -299,7 +336,7 @@ export function TableScreen({ route, navigation }) {
               <AssignChip
                 key={person.id}
                 person={person}
-                selected={table.runnerId === person.id}
+                selected={samePerson(person, runnerId)}
                 onPress={async () => {
                   try {
                     await api.assignTable({ actorId: data.me.id, tableId: table.id, assigneeId: person.id });
@@ -369,31 +406,53 @@ function ProblemModal({ visible, comment, error, onChange, onClose, onSave }) {
 
 export function HistoryScreen({ route, navigation }) {
   const data = useRestaurant();
-  const table = data?.allTables.find((item) => item.id === route.params.tableId);
-  const rows = (data?.history ?? [])
-    .filter((item) => item.tableId === route.params.tableId)
-    .slice()
-    .sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt));
+  const tableId = route.params.tableId;
+  const table = data?.allTables.find((item) => item.id === tableId) ?? data?.tables.find((item) => item.id === tableId);
+  const [rows, setRows] = useState(null);
+  const [error, setError] = useState(null);
+  useFocusEffect(
+    useCallback(() => {
+      let alive = true;
+      api
+        .loadTableHistory(tableId)
+        .then((list) => {
+          if (alive) {
+            setRows(list.slice().sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt)));
+            setError(null);
+          }
+        })
+        .catch((caught) => {
+          if (alive) {
+            setError(caught.message);
+          }
+        });
+      return () => {
+        alive = false;
+      };
+    }, [tableId]),
+  );
 
   return (
     <Screen scroll>
       <BackLink onPress={() => navigation.goBack()} />
-      <Title>История стола {table?.number ?? ""}</Title>
-      {rows.length ? (
-        rows.map((row) => (
-          <View key={row.id} style={styles.history}>
-            <Text style={styles.line}>
-              {formatClock(row.createdAt)} {formatDay(row.createdAt)}
-            </Text>
-            <Text style={styles.rowTitle}>
-              {statusLabel(row.newStatus)}. {userName(row.userId)}
-            </Text>
-            {row.comment ? <Text style={styles.muted}>{row.comment}</Text> : null}
-          </View>
-        ))
-      ) : (
-        <Lead>По этому столу ещё нет записей.</Lead>
-      )}
+      <Title>История стола {table?.number ?? rows?.[0]?.tableNumber ?? ""}</Title>
+      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {rows === null && !error ? <Lead>Загружаем историю.</Lead> : null}
+      {rows?.length
+        ? rows.map((row) => (
+            <View key={row.id} style={styles.history}>
+              <Text style={styles.line}>
+                {formatClock(row.createdAt)} {formatDay(row.createdAt)}
+              </Text>
+              <Text style={styles.rowTitle}>
+                {row.oldStatus ? `${statusLabel(row.oldStatus)} → ` : ""}
+                {statusLabel(row.newStatus)}. {userName(row.changedByMembershipId)}
+              </Text>
+              {row.comment ? <Text style={styles.muted}>{row.comment}</Text> : null}
+            </View>
+          ))
+        : null}
+      {rows && !rows.length ? <Lead>По этому столу ещё нет записей.</Lead> : null}
     </Screen>
   );
 }

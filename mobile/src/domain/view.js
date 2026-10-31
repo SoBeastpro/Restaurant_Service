@@ -56,6 +56,9 @@ export function buildView(state, sessionUser) {
         ),
       )
     : [];
+  const draftShift = shift
+    ? null
+    : state.shifts.find((item) => String(item.venueId) === String(me.venueId) && item.status === "PLANNED") ?? null;
   const tasks = visibleTasks(state, me);
   const allTasks = state.tasks.filter((item) => item.venueId === me.venueId && !item.deletedAt);
   const today = todayKey();
@@ -70,7 +73,10 @@ export function buildView(state, sessionUser) {
     halls,
     people,
     shift,
+    draftShift,
     onShift,
+    onShiftCount: shift ? onShift.length || Number(shift.employeeCount) || 0 : 0,
+    problems: state.problems ?? [],
     tasks,
     allTasks,
     tables,
@@ -105,6 +111,18 @@ export function statsFor(state, venueId, period, now = new Date()) {
     inProgress: inProgress.length,
     current,
   };
+}
+
+export function samePerson(person, id) {
+  if (!person || id == null || id === "") {
+    return false;
+  }
+  const key = String(id);
+  return String(person.id) === key || (person.membershipId != null && String(person.membershipId) === key);
+}
+
+export function isOnShift(view, person) {
+  return (view?.onShift ?? []).some((id) => samePerson(person, id));
 }
 
 export function nameOf(state, userId) {

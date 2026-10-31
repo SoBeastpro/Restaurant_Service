@@ -2,17 +2,38 @@ import { useCallback, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { useSession } from "../session";
-import { STAFF_ROLES, TABLE_STATUSES, permissionsFor, roleLabel, roleLine, shiftStatusLabel } from "../domain/catalog";
-import { formatDay, todayKey } from "../domain/format";
+import { roleLabel, roleLine } from "../domain/catalog";
+import { formatClock, formatDay } from "../domain/format";
+import { plannedRunnerId, plannedWaiterId, shiftLane, shiftPlanGaps } from "../domain/shift";
+import { isOnShift, samePerson } from "../domain/view";
 import { api } from "../api/store";
-import { Avatar, Choice, Panel } from "../components/blocks";
+import { Avatar, Choice, Panel, Problems } from "../components/blocks";
 import { colors, space, type as font } from "../theme";
 import { useRestaurant } from "../useRestaurant";
-import { clockTime, firstError, planItem } from "../validation";
+import { clockTime, firstError } from "../validation";
 import { BackLink, Button, Field, Lead, Screen, Title } from "../ui";
+
+function useRefreshOnFocus() {
+  useFocusEffect(
+    useCallback(() => {
+      void api.refresh();
+    }, []),
+  );
+}
+
+function shiftLead(data) {
+  if (data.shift) {
+    return `Смена идёт, ${data.shift.start}-${data.shift.end}`;
+  }
+  if (data.draftShift) {
+    return `Черновик смены ${data.draftShift.start}-${data.draftShift.end}, ещё не начата`;
+  }
+  return "Смена ещё не открыта";
+}
 
 export function TeamScreen({ navigation }) {
   const data = useRestaurant();
+  useRefreshOnFocus();
   if (!data) {
     return null;
   }
@@ -22,15 +43,12 @@ export function TeamScreen({ navigation }) {
     <Screen scroll>
       <BackLink onPress={() => navigation.goBack()} />
       <Title>Команда</Title>
-      <Lead>{data.shift ? `Смена ${data.shift.start}-${data.shift.end}` : "Смена на сегодня не открыта"}</Lead>
-      {data.shift ? (
-        <Button label="Состав смены" onPress={() => navigation.navigate("ShiftOpen")} />
-      ) : (
-        <Button label="Открыть смену" onPress={() => navigation.navigate("ShiftOpen")} />
-      )}
+      <Lead>{shiftLead(data)}</Lead>
+      <Problems items={data.problems} />
+      <Button label={data.shift ? "Состав смены" : "Открыть смену"} onPress={() => navigation.navigate("ShiftOpen")} />
       <Button tone="ghost" label="Пригласить" onPress={() => navigation.navigate("Invite")} />
       {people.map((person) => {
-        const onShift = data.onShift.some((id) => String(id) === String(person.id));
+        const onShift = isOnShift(data, person);
         return (
           <Pressable
             key={person.id}
@@ -55,11 +73,7 @@ export function TeamScreen({ navigation }) {
 
 export function ShiftBoardScreen({ navigation }) {
   const data = useRestaurant();
-  useFocusEffect(
-    useCallback(() => {
-      void api.refresh();
-    }, []),
-  );
+  useRefreshOnFocus();
   if (!data) {
     return null;
   }
@@ -68,15 +82,15 @@ export function ShiftBoardScreen({ navigation }) {
   return (
     <Screen scroll>
       <Title>Кто на смене?</Title>
-      <Lead>{data.shift ? `Смена идёт, ${data.shift.start}-${data.shift.end}` : "Смена ещё не открыта"}</Lead>
-      {data.shift ? (
-        <Button label="Состав" onPress={() => navigation.navigate("ShiftOpen")} />
-      ) : (
-        <Button label="Начать смену" onPress={() => navigation.navigate("ShiftOpen")} />
-      )}
+      <Lead>{shiftLead(data)}</Lead>
+      <Problems items={data.problems} />
+      <Button
+        label={data.shift ? "Состав" : data.draftShift ? "Продолжить смену" : "Начать смену"}
+        onPress={() => navigation.navigate("ShiftOpen")}
+      />
       {data.shift ? <Button tone="ghost" label="Закрыть смену" onPress={() => navigation.navigate("ShiftClose")} /> : null}
       {people.map((person) => {
-        const onShift = data.onShift.some((id) => String(id) === String(person.id));
+        const onShift = isOnShift(data, person);
         return (
           <Pressable
             key={person.id}
@@ -105,8 +119,7 @@ export function ShiftBoardScreen({ navigation }) {
 
 export function PersonScreen({ route, navigation }) {
   const data = useRestaurant();
-  const person = data?.people.find((item) => item.id === route.params.userId);
-  const [error, setError] = useState(null);
+  const person = data?.people.find((item) => samePerson(item, route.params.userId));
   if (!data || !person) {
     return (
       <Screen>
@@ -115,189 +128,183 @@ export function PersonScreen({ route, navigation }) {
       </Screen>
     );
   }
-  const shifts = data.shifts.filter((shift) => data.attendance.some((row) => row.shiftId === shift.id && row.userId === person.id));
-  const tasks = data.allTasks.filter((task) => task.assigneeId === person.id && task.status !== "COMPLETED" && task.status !== "CANCELLED");
-
-  async function save(role) {
-    try {
-      await api.updateStaff({
-        actorId: data.me.id,
-        userId: person.id,
-        fullName: person.fullName,
-        role,
-        permissions: permissionsFor(role),
-      });
-      setError(null);
-    } catch (caught) {
-      setError(caught.message);
-    }
-  }
+  const tasks = data.allTasks.filter(
+    (task) => samePerson(person, task.assigneeId) && task.status !== "COMPLETED" && task.status !== "CANCELLED",
+  );
+  const manager = data.me.role === "MANAGER";
 
   return (
     <Screen scroll>
       <BackLink onPress={() => navigation.goBack()} />
       <Title>{person.fullName}</Title>
       <Lead>{roleLine(person)}</Lead>
-      <Text style={styles.meta}>В команде с {person.createdAt ? formatDay(person.createdAt) : "этого дня"}</Text>
+      {person.createdAt ? <Text style={styles.meta}>В команде с {formatDay(person.createdAt)}</Text> : null}
       <Text style={styles.section}>Открытые задачи: {tasks.length}</Text>
-      {person.invitationToken && person.inviteUses === 0 ? (
-        <Text style={styles.meta}>Приглашение ещё не принято: {person.invitationUrl}</Text>
-      ) : null}
-      <Text style={styles.section}>Смены: {shifts.length}</Text>
-      {shifts.slice(0, 5).map((shift) => (
-        <Text key={shift.id} style={styles.meta}>
-          {shift.date} {shift.start}-{shift.end}, {shiftStatusLabel(shift.status)}
-        </Text>
-      ))}
-      {data.me.role === "MANAGER" && person.id !== data.me.id ? (
+      <Text style={styles.section}>{isOnShift(data, person) ? "Сейчас на смене" : "Сейчас не на смене"}</Text>
+      {person.status === "INVITED" ? (
         <>
-          <Text style={styles.section}>Роль</Text>
-          <View style={styles.wrap}>
-            {STAFF_ROLES.map((role) => (
-              <Choice key={role.id} label={role.label} selected={person.role === role.id} onPress={() => save(role.id)} />
-            ))}
-          </View>
-          <Text style={styles.section}>План на сегодня</Text>
-          <DayPlan person={person} actorId={data.me.id} plans={data.plans} />
-          <Text style={styles.section}>Статусы стола</Text>
-          <View style={styles.wrap}>
-            {TABLE_STATUSES.map((status) => {
-              const selected = (person.permissions?.tableStatuses ?? []).includes(status.id);
-              return (
-                <Choice
-                  key={status.id}
-                  label={status.label}
-                  selected={selected}
-                  onPress={() => {
-                    const current = person.permissions?.tableStatuses ?? [];
-                    const tableStatuses = selected ? current.filter((id) => id !== status.id) : [...current, status.id];
-                    void api.updateStaff({
-                      actorId: data.me.id,
-                      userId: person.id,
-                      fullName: person.fullName,
-                      role: person.role,
-                      permissions: {
-                        tableStatuses,
-                        ownTablesOnly: person.role === "WAITER",
-                      },
-                    });
-                  }}
-                />
-              );
-            })}
-          </View>
-          {error ? <Text style={styles.error}>{error}</Text> : null}
-          <Button
-            tone="ghost"
-            label={person.status === "BLOCKED" ? "Разблокировать" : "Заблокировать"}
-            onPress={() => void api.blockStaff({ actorId: data.me.id, userId: person.id, blocked: person.status !== "BLOCKED" })}
-          />
-          <Button
-            tone="danger"
-            label="Убрать из зала"
-            onPress={async () => {
-              try {
-                await api.deleteStaff({ actorId: data.me.id, userId: person.id });
-                navigation.goBack();
-              } catch (caught) {
-                setError(caught.message);
-              }
-            }}
-          />
+          <Text style={styles.meta}>Приглашение ещё не принято.</Text>
+          {manager ? <Button tone="ghost" label="К приглашениям" onPress={() => navigation.navigate("Invite")} /> : null}
         </>
+      ) : null}
+      {manager && !samePerson(person, data.me.id) ? (
+        <Lead>Смена роли и прав, план дня, блокировка и удаление сотрудника: на сервере ещё нет.</Lead>
       ) : null}
     </Screen>
   );
 }
 
+function holderName(people, id) {
+  return people.find((person) => samePerson(person, id))?.fullName ?? null;
+}
+
 export function ShiftOpenScreen({ navigation }) {
   const data = useRestaurant();
-  const [start, setStart] = useState(data?.shift?.start ?? "12:00");
-  const [end, setEnd] = useState(data?.shift?.end ?? "23:00");
-  const [picked, setPicked] = useState(data?.onShift ?? []);
+  const base = data?.shift ?? data?.draftShift ?? null;
+  const [start, setStart] = useState(base?.start || "12:00");
+  const [end, setEnd] = useState(base?.end || "23:00");
+  const [picked, setPicked] = useState(() => base?.memberIds ?? []);
   const [error, setError] = useState(null);
+  const [busy, setBusy] = useState(false);
   if (!data) {
     return null;
   }
+  const active = Boolean(data.shift);
+  const draft = data.draftShift;
   const staff = data.people.filter((person) => person.status === "ACTIVE" && person.role !== "MANAGER");
+  const members = staff.filter((person) => picked.some((id) => samePerson(person, id)));
+  const gaps = active ? [] : shiftPlanGaps({ members, tables: data.allTables });
 
-  function toggle(id) {
-    setPicked((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));
+  function toggle(person) {
+    setPicked((current) =>
+      current.some((id) => samePerson(person, id))
+        ? current.filter((id) => !samePerson(person, id))
+        : [...current, person.id],
+    );
+  }
+
+  async function save(startNow) {
+    const message = draft ? null : firstError(clockTime(start, "начало"), clockTime(end, "конец"));
+    if (message) {
+      setError(message);
+      return;
+    }
+    if (gaps.length) {
+      setError("Состав не сохранён: сначала закройте пункты из списка «Что осталось».");
+      return;
+    }
+    setBusy(true);
+    try {
+      await api.saveShiftPlan({
+        shiftId: draft?.id ?? null,
+        start,
+        end,
+        memberIds: members.map((person) => person.id),
+        startNow,
+      });
+      setError(null);
+      navigation.goBack();
+    } catch (caught) {
+      setError(caught.message);
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
     <Screen
       scroll
       footer={
-        <Button
-          label={data.shift ? "Сохранить состав" : "Начать смену"}
-          onPress={async () => {
-            try {
-              if (data.shift) {
-                await api.setShiftMembers({ actorId: data.me.id, shiftId: data.shift.id, memberIds: picked });
-              } else {
-                await api.openShift({ actorId: data.me.id, start, end, memberIds: picked });
-              }
-              navigation.goBack();
-            } catch (caught) {
-              setError(caught.message);
-            }
-          }}
-        />
+        active ? null : (
+          <>
+            <Button label={busy ? "Сохраняем" : "Начать смену"} disabled={busy} onPress={() => save(true)} />
+            <Button tone="ghost" label="Сохранить состав" disabled={busy} onPress={() => save(false)} />
+          </>
+        )
       }
     >
       <BackLink onPress={() => navigation.goBack()} />
-      <Title>{data.shift ? "Кто на смене" : "Открыть смену"}</Title>
-      <Lead>В смену берут только тех, кто принял приглашение. Каждый стол закрепите за официантом и раннером.</Lead>
-      {!data.shift ? (
+      <Title>{active ? "Кто на смене" : draft ? "Черновик смены" : "Открыть смену"}</Title>
+      <Problems items={data.problems} />
+      {active ? (
+        <>
+          <Lead>
+            {data.shift.start}-{data.shift.end}
+          </Lead>
+          <Lead>После старта состав и столы не меняются. Чтобы поменять людей, закройте смену и откройте новую.</Lead>
+        </>
+      ) : (
+        <Lead>
+          В смену берут только тех, кто принял приглашение. Каждый стол закрепите за одним официантом и одним раннером.
+          «Сохранить состав» оставляет смену черновиком, «Начать смену» сохраняет и запускает.
+        </Lead>
+      )}
+      {!active && !draft ? (
         <>
           <Field label="Начало" value={start} onChangeText={setStart} placeholder="12:00" />
           <Field label="Конец" value={end} onChangeText={setEnd} placeholder="23:00" />
         </>
-      ) : (
+      ) : null}
+      {draft ? (
         <Lead>
-          {data.shift.start}-{data.shift.end}
+          {draft.start}-{draft.end}
         </Lead>
-      )}
+      ) : null}
       {error ? <Text style={styles.error}>{error}</Text> : null}
-      {staff.map((person) => {
-        const on = picked.some((id) => String(id) === String(person.id));
+      {gaps.length ? (
+        <Panel>
+          <Text style={styles.name}>Что осталось</Text>
+          {gaps.map((gap) => (
+            <Text key={gap} style={styles.meta}>
+              {gap}
+            </Text>
+          ))}
+        </Panel>
+      ) : null}
+      {(active ? staff.filter((person) => isOnShift(data, person)) : staff).map((person) => {
+        const on = active || picked.some((id) => samePerson(person, id));
+        const runner = shiftLane(person) === "runner";
+        const holderOf = (table) => (runner ? plannedRunnerId(table) : plannedWaiterId(table));
         return (
           <Panel key={person.id} style={on ? styles.cardOn : null}>
             <Pressable
               accessibilityRole="checkbox"
-              accessibilityState={{ checked: on }}
-              onPress={() => toggle(person.id)}
+              accessibilityState={{ checked: on, disabled: active }}
+              onPress={active ? undefined : () => toggle(person)}
             >
               <Text style={styles.name}>{person.fullName}</Text>
-              <Text style={styles.meta}>
-                {roleLabel(person.role === "RUNNER" || person.position === "RUNNER" ? "RUNNER" : person.role)}
-              </Text>
+              <Text style={styles.meta}>{roleLabel(runner ? "RUNNER" : person.role)}</Text>
             </Pressable>
             {on ? (
               <View style={styles.wrap}>
-                {data.allTables.map((table) => {
-                  const taken =
-                    (person.position === "RUNNER" || person.role === "RUNNER" ? table.runnerId : table.assigneeId) ===
-                    person.id;
-                  return (
-                    <Choice
-                      key={table.id}
-                      label={`Стол ${table.number}`}
-                      selected={taken}
-                      onPress={() => {
-                        void api.assignTable({ actorId: data.me.id, tableId: table.id, assigneeId: person.id }).catch((caught) => {
-                          setError(caught.message);
-                        });
-                      }}
-                    />
-                  );
-                })}
+                {data.allTables
+                  .filter((table) => !active || samePerson(person, holderOf(table)))
+                  .map((table) => {
+                    const holder = holderOf(table);
+                    const mine = samePerson(person, holder);
+                    const other = !mine && holder != null ? holderName(data.people, holder) : null;
+                    return (
+                      <Choice
+                        key={table.id}
+                        label={other ? `Стол ${table.number} · ${other}` : `Стол ${table.number}`}
+                        selected={mine}
+                        onPress={() => {
+                          if (active) {
+                            return;
+                          }
+                          api.assignTable({ actorId: data.me.id, tableId: table.id, assigneeId: person.id }).catch((caught) => {
+                            setError(caught.message);
+                          });
+                        }}
+                      />
+                    );
+                  })}
               </View>
             ) : null}
           </Panel>
         );
       })}
+      {!staff.length ? <Lead>Пока нет сотрудников, которые приняли приглашение.</Lead> : null}
     </Screen>
   );
 }
@@ -323,7 +330,7 @@ export function ShiftCloseScreen({ navigation }) {
                 actorId: data.me.id,
                 unfinishedTasks: open.map((task) => ({ taskId: task.id, action: choices[task.id] ?? "CARRY_OVER" })),
               });
-              navigation.replace("ShiftReport", { report: result?.report ?? result ?? {} });
+              navigation.replace("ShiftReport", { report: result.report });
             } catch (caught) {
               setError(caught.message);
             }
@@ -357,56 +364,6 @@ export function ShiftCloseScreen({ navigation }) {
   );
 }
 
-function DayPlan({ person, actorId, plans }) {
-  const plan = (plans ?? []).find((item) => item.userId === person.id && item.date === todayKey());
-  const [text, setText] = useState("");
-  const [error, setError] = useState(null);
-  const items = plan?.items ?? [];
-
-  return (
-    <View style={styles.stack}>
-      {items.map((item) => (
-        <Pressable
-          key={item.id}
-          accessibilityRole="checkbox"
-          accessibilityState={{ checked: item.done }}
-          onPress={() => api.togglePlanItem({ actorId, planId: plan.id, itemId: item.id })}
-          style={styles.planRow}
-        >
-          <View style={[styles.check, item.done ? styles.checkOn : null]}>
-            <Text style={styles.checkMark}>{item.done ? "✓" : ""}</Text>
-          </View>
-          <Text style={[styles.planText, item.done ? styles.done : null]}>{item.text}</Text>
-        </Pressable>
-      ))}
-      {!items.length ? <Text style={styles.meta}>Пунктов пока нет.</Text> : null}
-      <Field label="Новый пункт" value={text} onChangeText={setText} capitalize="sentences" />
-      <Button
-        tone="ghost"
-        label="Добавить в план"
-        onPress={() => {
-          if (!text.trim()) {
-            setError("Введите пункт.");
-            return;
-          }
-          try {
-            api.saveDayPlan({
-              actorId,
-              userId: person.id,
-              items: [...items.map((item) => item.text), text],
-            });
-            setText("");
-            setError(null);
-          } catch (caught) {
-            setError(caught.message);
-          }
-        }}
-      />
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-    </View>
-  );
-}
-
 export function ShiftReportScreen({ route }) {
   const { signOut } = useSession();
   const report = route.params?.report;
@@ -415,13 +372,19 @@ export function ShiftReportScreen({ route }) {
       <Title>Отчёт смены</Title>
       {report ? (
         <>
-          <Text style={styles.name}>Создано: {report.created}</Text>
-          <Text style={styles.name}>Выполнено: {report.done}</Text>
-          <Text style={styles.name}>Перенесено: {report.carried}</Text>
-          <Text style={styles.name}>Отменено: {report.cancelled}</Text>
+          {report.actualStartedAt ? (
+            <Lead>
+              {formatDay(report.actualStartedAt)} {formatClock(report.actualStartedAt)}
+              {report.actualClosedAt ? `-${formatClock(report.actualClosedAt)}` : ""}
+            </Lead>
+          ) : null}
+          <Text style={styles.name}>Всего задач: {report.totalTasks ?? 0}</Text>
+          <Text style={styles.name}>Выполнено: {report.completedTasks ?? 0}</Text>
+          <Text style={styles.name}>Перенесено: {report.carriedOverTasks ?? 0}</Text>
+          <Text style={styles.name}>Отменено: {report.cancelledTasks ?? 0}</Text>
         </>
       ) : (
-        <Lead>Отчёт появится после закрытия смены.</Lead>
+        <Lead>Сервер не прислал отчёт. Смена закрыта, цифры появятся в отчёте смены на сервере.</Lead>
       )}
     </Screen>
   );
@@ -437,20 +400,4 @@ const styles = StyleSheet.create({
   error: { fontFamily: font.regular, color: colors.danger, fontSize: 14 },
   wrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   pressed: { transform: [{ translateX: 1 }, { translateY: 1 }] },
-  stack: { gap: 8 },
-  planRow: { minHeight: 44, flexDirection: "row", alignItems: "center", gap: 10 },
-  check: {
-    width: 22,
-    height: 22,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: colors.ink,
-    backgroundColor: colors.white,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  checkOn: { backgroundColor: colors.accent },
-  checkMark: { fontFamily: font.bold, fontSize: 13, color: colors.ink, lineHeight: 16 },
-  planText: { flex: 1, fontFamily: font.regular, fontSize: 15, color: colors.ink },
-  done: { textDecorationLine: "line-through", color: colors.mute },
 });

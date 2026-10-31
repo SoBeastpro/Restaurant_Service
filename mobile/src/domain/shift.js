@@ -7,6 +7,59 @@ export function openShiftOf(state, venueId) {
   );
 }
 
+export function shiftLane(person) {
+  return person?.position === "RUNNER" || person?.role === "RUNNER" ? "runner" : "waiter";
+}
+
+export function plannedWaiterId(table) {
+  return table.draftWaiterId !== undefined ? table.draftWaiterId : table.assigneeId;
+}
+
+export function plannedRunnerId(table) {
+  return table.draftRunnerId !== undefined ? table.draftRunnerId : table.runnerId;
+}
+
+// Повторяет правило сервера (ShiftService.configure/start): в смене хотя бы один сотрудник,
+// у каждого есть стол, каждый активный стол закреплён за одним официантом и одним раннером из состава.
+export function shiftPlanGaps({ members, tables }) {
+  const gaps = [];
+  if (!members.length) {
+    return ["Добавьте в смену хотя бы одного сотрудника."];
+  }
+  if (!tables.length) {
+    return ["В зале нет столов — сначала добавьте столы."];
+  }
+  const picked = new Map(members.map((person) => [String(person.id), person]));
+  const tablesOf = new Map(members.map((person) => [String(person.id), 0]));
+  for (const table of tables) {
+    const waiterId = plannedWaiterId(table);
+    const runnerId = plannedRunnerId(table);
+    const waiter = waiterId != null && picked.has(String(waiterId));
+    const runner = runnerId != null && picked.has(String(runnerId));
+    if (waiter) {
+      tablesOf.set(String(waiterId), tablesOf.get(String(waiterId)) + 1);
+    }
+    if (runner) {
+      tablesOf.set(String(runnerId), tablesOf.get(String(runnerId)) + 1);
+    }
+    if (!waiter && !runner) {
+      gaps.push(`Стол ${table.number}: нет официанта и раннера.`);
+    } else if (!waiter) {
+      gaps.push(`Стол ${table.number}: нет официанта.`);
+    } else if (!runner) {
+      gaps.push(`Стол ${table.number}: нет раннера.`);
+    }
+  }
+  for (const person of members) {
+    if (person.role === "MANAGER") {
+      gaps.push(`${person.fullName}: в смену со столами берут только официантов и раннеров.`);
+    } else if (!tablesOf.get(String(person.id))) {
+      gaps.push(`${person.fullName}: не закреплён ни один стол.`);
+    }
+  }
+  return gaps;
+}
+
 export function openShift(state, { actorId, start, end, memberIds }) {
   const actor = userById(state, actorId);
   if (!actor || actor.role !== "MANAGER") {

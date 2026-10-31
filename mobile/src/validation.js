@@ -148,8 +148,27 @@ export function seatCount(value, label = "число мест") {
   return integerInRange(value, { min: 1, max: 100, label });
 }
 
+export const INVITE_PREFIX = "rest://invite/";
+// Сервер отклоняет токен короче 20 символов (InvitationService.extractToken).
+export const INVITE_TOKEN_MIN = 20;
+
+export function extractInviteToken(value) {
+  const raw = String(value ?? "").trim();
+  return raw.startsWith(INVITE_PREFIX) ? raw.slice(INVITE_PREFIX.length).trim() : raw;
+}
+
 export function inviteToken(value) {
-  return requiredText(value, "токен приглашения", { min: 8, max: 200 });
+  const token = extractInviteToken(value);
+  if (!token) {
+    return "Укажите токен приглашения.";
+  }
+  if (token.length < INVITE_TOKEN_MIN) {
+    return `Токен приглашения: минимум ${INVITE_TOKEN_MIN} символов. Скопируйте ссылку целиком.`;
+  }
+  if (token.length > 200) {
+    return "Токен приглашения: не больше 200 символов.";
+  }
+  return null;
 }
 
 export function taskTitle(value) {
@@ -165,6 +184,9 @@ export function planItem(value) {
 }
 
 export function seatsLabel(count) {
+  if (count == null || count === "") {
+    return "мест: нет данных";
+  }
   const n = Number(count);
   if (!Number.isFinite(n)) {
     return "мест";

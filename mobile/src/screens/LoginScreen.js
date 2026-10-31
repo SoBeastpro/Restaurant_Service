@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Pressable, StyleSheet, Text } from "react-native";
+import { StyleSheet, Text } from "react-native";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { useSession } from "../session";
 import { colors, type as font } from "../theme";
@@ -53,9 +53,7 @@ export function LoginScreen() {
         maxLength={100}
       />
       <Field label="Пароль" value={password} onChangeText={setPassword} secure error={error} maxLength={72} />
-      <Pressable accessibilityRole="button" onPress={() => navigation.navigate("Reset", { email: login })}>
-        <Text style={styles.link}>Забыли пароль?</Text>
-      </Pressable>
+      <Text style={styles.lead}>Восстановление пароля: на сервере ещё нет.</Text>
     </Screen>
   );
 }
@@ -70,5 +68,4 @@ const styles = StyleSheet.create({
     lineHeight: 38,
   },
   lead: { fontFamily: font.regular, fontSize: 16, lineHeight: 22, color: colors.mute },
-  link: { fontFamily: font.bold, fontSize: 14, color: colors.ink, paddingVertical: 8, minHeight: 48 },
 });

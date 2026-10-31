@@ -1,7 +1,11 @@
 import { permissionsFor } from "../domain/catalog";
-import { openingHoursFromRange } from "../validation";
+import { extractInviteToken, openingHoursFromRange } from "../validation";
 import { paths } from "./paths";
-import { request, refreshSession, setTokens } from "./http";
+import { getTokens, request, refreshSession, setTokens } from "./http";
+import { inviteSecret, loadInviteSecrets, rememberInvitation } from "./invites";
+
+// Пока на сервере нет чтения залов и столов для сотрудника (BE-2), эти GET доступны только директору и менеджеру.
+const STAFF_READS_HALLS = process.env.EXPO_PUBLIC_STAFF_READS_HALLS === "1";
 
 function uiRole(profile) {
   if (profile.role === "DIRECTOR" || profile.role === "MANAGER") {
@@ -14,6 +18,10 @@ function uiRole(profile) {
     return "WAITER";
   }
   return "EMPLOYEE";
+}
+
+function isOwner(profile) {
+  return profile.role === "DIRECTOR" || profile.role === "MANAGER";
 }
 
 function fullName(person) {
@@ -40,8 +48,7 @@ function asNumber(value) {
 }
 
 function resolveSetup(profile, halls, tables) {
-  const owner = profile.role === "DIRECTOR" || profile.role === "MANAGER";
-  if (!owner) {
+  if (!isOwner(profile)) {
     return "done";
   }
   if (!profile.restaurantId) {
@@ -78,17 +85,46 @@ function participantsOf(shift) {
   return asList(shift?.participants);
 }
 
-async function optional(loader) {
-  try {
-    return await loader();
-  } catch {
-    return null;
+function loaderWithProblems() {
+  const problems = [];
+  async function load(label, loader, missing = null) {
+    try {
+      return await loader();
+    } catch (error) {
+      if (error?.status === 404) {
+        return missing;
+      }
+      if (error?.status === 401) {
+        throw error;
+      }
+      const text = error?.status ? `${label}: ${error.message}` : String(error?.message || "Ошибка сети.");
+      if (!problems.includes(text)) {
+        problems.push(text);
+      }
+      return missing;
+    }
   }
+  return { problems, load };
+}
+
+function baseFields(venueName) {
+  return {
+    username: "",
+    email: "",
+    photo: null,
+    createdAt: null,
+    invitationToken: null,
+    invitationId: null,
+    inviteExpiresAt: null,
+    inviteUses: 0,
+    venueName,
+  };
 }
 
 function mapUser(profile, venueName, membershipId) {
   const role = uiRole(profile);
   return {
+    ...baseFields(venueName),
     id: idOf(profile.id),
     username: profile.login,
     email: profile.email || "",
@@ -99,18 +135,13 @@ function mapUser(profile, venueName, membershipId) {
     position: profile.position || role,
     venueId: idOf(profile.restaurantId),
     membershipId: idOf(membershipId),
-    permissions: permissionsFor(role === "MANAGER" ? "MANAGER" : role),
+    permissions: permissionsFor(role),
     status: profile.status || "ACTIVE",
-    photo: null,
     emailConfirmed: true,
     createdAt: profile.createdAt,
-    invitationToken: null,
-    inviteUses: 0,
-    venueName,
   };
 }
 
-const invitationSecrets = new Map();
 const assignmentDraft = {
   waiter: new Map(),
   runner: new Map(),
@@ -120,11 +151,11 @@ function staffLane(person) {
   return person?.position === "RUNNER" || person?.role === "RUNNER" ? "runner" : "waiter";
 }
 
-export function assignTableDraft({ tableId, person }) {
+export function assignTableDraft({ tableId, person, release = false }) {
   if (!person) {
     throw new Error("Сотрудник не найден.");
   }
-  if (person.status === "INVITED" || person.invitationToken) {
+  if (person.status === "INVITED") {
     throw new Error("Сначала сотрудник должен принять приглашение и войти в приложение.");
   }
   if (person.status !== "ACTIVE") {
@@ -133,20 +164,7 @@ export function assignTableDraft({ tableId, person }) {
   if (person.role === "MANAGER") {
     throw new Error("Стол закрепляют за официантом или раннером.");
   }
-  assignmentDraft[staffLane(person)].set(String(tableId), person.membershipId);
-}
-
-export function tableIdsByMemberFromDraft() {
-  const byMember = {};
-  for (const lane of ["waiter", "runner"]) {
-    for (const [tableId, membershipId] of assignmentDraft[lane]) {
-      if (!byMember[membershipId]) {
-        byMember[membershipId] = [];
-      }
-      byMember[membershipId].push(tableId);
-    }
-  }
-  return byMember;
+  assignmentDraft[staffLane(person)].set(String(tableId), release ? null : person.membershipId);
 }
 
 export function clearAssignmentDraft() {
@@ -154,62 +172,35 @@ export function clearAssignmentDraft() {
   assignmentDraft.runner.clear();
 }
 
-function extractInviteToken(value) {
-  const raw = String(value || "").trim();
-  if (!raw) {
-    return "";
-  }
-  const prefix = "rest://invite/";
-  return raw.startsWith(prefix) ? raw.slice(prefix.length) : raw;
-}
-
-function rememberInvitation(invitation) {
-  const token = extractInviteToken(invitation?.invitationUrl || invitation?.qrContent);
-  if (!invitation || !token) {
-    return;
-  }
-  invitationSecrets.set(invitation.id, token);
-  if (invitation.employeeId) {
-    invitationSecrets.set(invitation.employeeId, token);
-  }
-}
-
 function mapInvite(row, venueId, venueName) {
-  const token =
-    extractInviteToken(row.invitationUrl || row.qrContent) ||
-    invitationSecrets.get(row.id) ||
-    invitationSecrets.get(row.employeeId) ||
-    "";
+  const secret = inviteSecret(row.id, row.employeeId);
+  const token = extractInviteToken(row.invitationUrl || row.qrContent) || secret?.token || "";
   const role = uiRole({ role: row.role, position: row.position });
   return {
-    id: row.employeeId || row.id,
-    username: "",
-    email: "",
+    ...baseFields(venueName),
+    id: idOf(row.employeeId || row.id),
     firstName: row.firstName || "",
     lastName: row.lastName || "",
     fullName: fullName(row),
     role,
     position: row.position || role,
-    venueId,
-    membershipId: row.employeeId || row.id,
-    permissions: permissionsFor(role === "MANAGER" ? "MANAGER" : role),
+    venueId: idOf(venueId),
+    membershipId: idOf(row.employeeId || row.id),
+    permissions: permissionsFor(role),
     status: row.status === "PENDING" ? "INVITED" : row.status,
-    photo: null,
     emailConfirmed: false,
-    createdAt: null,
     invitationToken: token || null,
+    invitationId: idOf(row.id),
+    inviteExpiresAt: row.expiresAt || secret?.expiresAt || null,
     inviteUses: row.status === "ACCEPTED" ? 1 : 0,
-    venueName,
   };
 }
 
 function mapEmployee(row, venueId, venueName) {
   const role = uiRole({ role: row.position === "MANAGER" || row.position === "DIRECTOR" ? row.position : "EMPLOYEE", position: row.position });
-  const id = idOf(row.userId || row.membershipId);
   return {
-    id,
-    username: "",
-    email: "",
+    ...baseFields(venueName),
+    id: idOf(row.userId || row.membershipId),
     firstName: row.firstName || "",
     lastName: row.lastName || "",
     fullName: fullName(row),
@@ -217,15 +208,30 @@ function mapEmployee(row, venueId, venueName) {
     position: row.position || role,
     venueId: idOf(venueId),
     membershipId: idOf(row.membershipId),
-    permissions: permissionsFor(role === "MANAGER" ? "MANAGER" : role),
+    permissions: permissionsFor(role),
     status: row.status || "ACTIVE",
-    photo: null,
     emailConfirmed: true,
-    createdAt: null,
-    invitationToken: null,
-    inviteUses: 0,
-    venueName,
   };
+}
+
+function mapShift(row, restaurantId, memberIds) {
+  const participants = participantsOf(row);
+  return {
+    id: idOf(row.id),
+    venueId: idOf(restaurantId),
+    date: day(row.actualStartedAt || row.scheduledStartAt),
+    start: clock(row.actualStartedAt || row.scheduledStartAt),
+    end: clock(row.scheduledEndAt),
+    status: row.status,
+    memberIds,
+    employeeCount: participants.length || Number(row.employeeCount) || memberIds.length,
+  };
+}
+
+function latest(rows) {
+  return rows
+    .slice()
+    .sort((left, right) => new Date(right.scheduledStartAt || 0) - new Date(left.scheduledStartAt || 0))[0] ?? null;
 }
 
 export async function loginRemote(loginName, password) {
@@ -245,24 +251,47 @@ export async function hydrateRemote(tokens) {
   if (tokens?.accessToken) {
     setTokens(tokens);
   }
+  await loadInviteSecrets();
+  const { problems, load } = loaderWithProblems();
   const profile = await request(paths.me);
   const restaurantId = profile.restaurantId;
-  const restaurant = restaurantId ? await optional(() => request(paths.restaurant(restaurantId))) : null;
+  const owner = isOwner(profile);
+  const inVenue = Boolean(restaurantId);
+  const readsHalls = inVenue && (owner || STAFF_READS_HALLS);
+
+  const [restaurant, hallRows, tableRows, employeeRows, invitationRows, shiftRows, current, notificationRows] =
+    await Promise.all([
+      inVenue && owner ? load("Ресторан", () => request(paths.restaurant(restaurantId))) : null,
+      readsHalls ? load("Залы", () => request(paths.halls(restaurantId))) : [],
+      readsHalls ? load("Столы", () => request(paths.tables(restaurantId))) : [],
+      inVenue ? load("Сотрудники", () => request(paths.employees(restaurantId)), []) : [],
+      inVenue && owner ? load("Приглашения", () => request(paths.invitations(restaurantId)), []) : [],
+      inVenue && owner ? load("Смены", () => request(paths.shifts(restaurantId)), []) : [],
+      inVenue && !owner ? load("Моя смена", () => request(paths.myCurrentShift)) : null,
+      load("Уведомления", () => request(paths.myNotifications), []),
+    ]);
   const venueName = restaurant?.name || "Заведение";
-  const halls = asList(restaurantId ? await optional(() => request(paths.halls(restaurantId))) : []);
-  const tables = asList(restaurantId ? await optional(() => request(paths.tables(restaurantId))) : []);
-  const employees = asList(restaurantId ? await optional(() => request(paths.employees(restaurantId))) : []);
-  const invitations = asList(restaurantId ? await optional(() => request(paths.invitations(restaurantId))) : []);
-  const current = await optional(() => request(paths.myCurrentShift));
-  const shiftList = asList(restaurantId ? await optional(() => request(paths.shifts(restaurantId))) : []);
-  const notifications = asList(await optional(() => request(paths.myNotifications)));
-  const activeFromList = shiftList.find((item) => item.status === "ACTIVE");
-  const shiftId = idOf(current?.id || activeFromList?.id);
-  let shiftDetail = current;
-  if (shiftId && restaurantId) {
-    shiftDetail = (await optional(() => request(`${paths.shifts(restaurantId)}/${shiftId}`))) || current;
-  }
-  const participants = participantsOf(shiftDetail);
+  const hallsUnknown = hallRows === null || tableRows === null;
+  const halls = asList(hallRows);
+  const tables = asList(tableRows);
+  const employees = asList(employeeRows);
+  const invitations = asList(invitationRows);
+  const shiftList = asList(shiftRows);
+  const notifications = asList(notificationRows);
+
+  const activeSummary = shiftList.find((item) => item.status === "ACTIVE") ?? null;
+  const plannedSummary = latest(shiftList.filter((item) => item.status === "PLANNED"));
+  const shiftDetail = (summary) =>
+    summary ? load("Состав смены", () => request(`${paths.shifts(restaurantId)}/${summary.id}`)) : null;
+  const [activeDetail, plannedDetail] = await Promise.all([shiftDetail(activeSummary), shiftDetail(plannedSummary)]);
+  const activeShift = owner
+    ? activeSummary && { ...activeSummary, ...(activeDetail || {}) }
+    : current?.status === "ACTIVE"
+      ? current
+      : null;
+  const plannedShift = plannedSummary && { ...plannedSummary, ...(plannedDetail || {}) };
+  const rosterShift = activeShift || plannedShift;
+  const participants = participantsOf(rosterShift);
 
   const people = employees.map((row) => mapEmployee(row, restaurantId, venueName));
   for (const invite of invitations) {
@@ -275,73 +304,68 @@ export async function hydrateRemote(tokens) {
     );
     if (existing) {
       existing.invitationToken = mapped.invitationToken;
+      existing.invitationId = mapped.invitationId;
+      existing.inviteExpiresAt = mapped.inviteExpiresAt;
       existing.status = existing.status === "ACTIVE" ? existing.status : mapped.status;
       continue;
     }
     people.push(mapped);
   }
-  const myMembership =
-    (profile.role === "MANAGER" || profile.role === "DIRECTOR") && shiftDetail?.responsibleMembershipId
-      ? idOf(shiftDetail.responsibleMembershipId)
-      : null;
+  const myMembership = owner && rosterShift?.responsibleMembershipId ? idOf(rosterShift.responsibleMembershipId) : null;
   const meRow =
     people.find((person) => sameId(person.id, profile.id)) ?? mapUser(profile, venueName, myMembership);
   if (!people.some((person) => sameId(person.id, meRow.id))) {
     people.unshift(meRow);
   }
+  if (owner) {
+    meRow.role = "MANAGER";
+    meRow.permissions = permissionsFor("MANAGER");
+  }
   for (const participant of participants) {
     if (people.some((person) => sameId(person.membershipId, participant.membershipId))) {
       continue;
     }
+    const role = participant.position === "RUNNER" ? "RUNNER" : "WAITER";
     people.push({
+      ...baseFields(venueName),
       id: idOf(participant.membershipId),
-      username: "",
-      email: "",
       firstName: "",
       lastName: "",
-      fullName: "На смене",
-      role: "EMPLOYEE",
-      position: participant.position || "EMPLOYEE",
-      venueId: restaurantId,
+      fullName: "Сотрудник вне списка",
+      role,
+      position: participant.position || role,
+      venueId: idOf(restaurantId),
       membershipId: idOf(participant.membershipId),
-      permissions: permissionsFor("WAITER"),
+      permissions: permissionsFor(role),
       status: "ACTIVE",
-      photo: null,
       emailConfirmed: true,
-      createdAt: null,
-      invitationToken: null,
-      inviteUses: 0,
-      venueName,
     });
   }
-  const byMembership = new Map(people.map((person) => [idOf(person.membershipId), idOf(person.id)]));
+  const userIdByMembership = (membershipId) => {
+    const person = people.find((row) => sameId(row.membershipId, membershipId) || sameId(row.id, membershipId));
+    return idOf(person?.id) || idOf(membershipId);
+  };
   const waiterByTable = new Map();
   const runnerByTable = new Map();
   for (const participant of participants) {
     const person = people.find((row) => sameId(row.membershipId, participant.membershipId));
-    const runner = staffLane(person || { position: participant.position }) === "runner";
-    const userId = byMembership.get(idOf(participant.membershipId));
+    const lane = staffLane(person || { position: participant.position });
     for (const tableId of participant.tableIds ?? []) {
-      if (!userId) {
-        continue;
-      }
-      if (runner) {
-        runnerByTable.set(String(tableId), userId);
-      } else {
-        waiterByTable.set(String(tableId), userId);
-      }
+      (lane === "runner" ? runnerByTable : waiterByTable).set(String(tableId), userIdByMembership(participant.membershipId));
     }
   }
-  for (const [tableId, membershipId] of assignmentDraft.waiter) {
-    waiterByTable.set(String(tableId), byMembership.get(membershipId) ?? membershipId);
-  }
-  for (const [tableId, membershipId] of assignmentDraft.runner) {
-    runnerByTable.set(String(tableId), byMembership.get(membershipId) ?? membershipId);
-  }
+  const draftOf = (lane, tableId) => {
+    const map = assignmentDraft[lane];
+    if (!map.has(String(tableId))) {
+      return undefined;
+    }
+    const membershipId = map.get(String(tableId));
+    return membershipId ? userIdByMembership(membershipId) : null;
+  };
 
   let mappedHalls = halls.map((hall) => ({
     id: hall.id,
-    venueId: restaurantId,
+    venueId: idOf(restaurantId),
     name: hall.name,
     deletedAt: hall.status === "ARCHIVED" ? hall.id : null,
   }));
@@ -353,34 +377,44 @@ export async function hydrateRemote(tokens) {
     status: item.status,
     assigneeId: waiterByTable.get(String(item.id)) ?? null,
     runnerId: runnerByTable.get(String(item.id)) ?? null,
+    draftWaiterId: draftOf("waiter", item.id),
+    draftRunnerId: draftOf("runner", item.id),
     problem: item.status === "PROBLEM" ? "Проблема" : null,
     deletedAt: null,
   }));
-  if (!mappedHalls.length && (current?.assignedTableIds?.length || mappedTables.length)) {
-    mappedHalls = [{ id: "hall-local", venueId: restaurantId, name: "Зал", deletedAt: null }];
+  const myTableIds = current?.assignedTableIds ?? [];
+  if (!mappedHalls.length && (myTableIds.length || mappedTables.length)) {
+    mappedHalls = [{ id: "hall-local", venueId: idOf(restaurantId), name: "Зал", deletedAt: null }];
   }
-  if (!mappedTables.length && current?.assignedTableIds?.length) {
-    mappedTables = current.assignedTableIds.map((id, index) => ({
+  if (!mappedTables.length && myTableIds.length) {
+    mappedTables = myTableIds.map((id, index) => ({
       id,
       hallId: mappedHalls[0]?.id,
       number: index + 1,
-      seats: 4,
+      seats: null,
       status: "READY",
-      assigneeId: meRow.id,
-      runnerId: null,
+      assigneeId: staffLane(meRow) === "waiter" ? meRow.id : null,
+      runnerId: staffLane(meRow) === "runner" ? meRow.id : null,
       problem: null,
       deletedAt: null,
     }));
+  } else if (!owner && myTableIds.length) {
+    const mine = new Set(myTableIds.map(String));
+    for (const item of mappedTables) {
+      if (mine.has(String(item.id))) {
+        item[staffLane(meRow) === "runner" ? "runnerId" : "assigneeId"] = meRow.id;
+      }
+    }
   }
 
-  const rawTasks = shiftDetail?.tasks ?? current?.tasks ?? [];
+  const rawTasks = (owner ? activeShift?.tasks : current?.tasks) ?? [];
   const mappedTasks = rawTasks.map((item) => ({
     id: item.id,
-    venueId: restaurantId,
+    venueId: idOf(restaurantId),
     title: item.description || "Задача",
     description: item.description || "",
     status: item.status,
-    assigneeId: byMembership.get(item.assignedToMembershipId) ?? item.assignedToMembershipId,
+    assigneeId: userIdByMembership(item.assignedToMembershipId),
     creatorId: null,
     tableId: null,
     createdAt: item.createdAt || new Date().toISOString(),
@@ -391,55 +425,41 @@ export async function hydrateRemote(tokens) {
     deletedAt: null,
   }));
 
-  const activeShift =
-    current?.status === "ACTIVE" || shiftDetail?.status === "ACTIVE" || activeFromList
-      ? shiftDetail || current || activeFromList
-      : null;
-  const staffOnShift = people.filter(
-    (person) => person.role !== "MANAGER" && person.status === "ACTIVE" && !person.invitationToken,
-  );
-  let memberIds = participants
-    .map((row) => {
-      const membershipId = idOf(row.membershipId);
-      const person = people.find((item) => sameId(item.membershipId, membershipId) || sameId(item.id, membershipId));
-      return idOf(person?.id) || byMembership.get(membershipId) || membershipId;
-    })
-    .filter(Boolean);
-  if (!memberIds.length && (activeFromList?.employeeCount > 0 || activeShift?.status === "ACTIVE")) {
-    memberIds = staffOnShift.map((person) => idOf(person.id)).filter(Boolean);
-  }
-  const mappedShift = activeShift
-    ? {
-        id: idOf(activeShift.id),
-        venueId: idOf(restaurantId),
-        date: day(activeShift.actualStartedAt || activeShift.scheduledStartAt),
-        start: clock(activeShift.actualStartedAt || activeShift.scheduledStartAt),
-        end: clock(activeShift.scheduledEndAt),
-        status: activeShift.status,
-        memberIds,
-        employeeCount: Number(activeFromList?.employeeCount ?? memberIds.length) || memberIds.length,
-      }
-    : null;
+  const rosterIds = participants.map((row) => userIdByMembership(row.membershipId)).filter(Boolean);
+  const activeIds = owner ? (activeShift ? rosterIds : []) : activeShift ? [meRow.id] : [];
+  const plannedIds = !activeShift && plannedShift ? rosterIds : [];
+  const mappedShift = activeShift ? mapShift(activeShift, restaurantId, activeIds) : null;
+  const shiftRowsSource = owner ? shiftList : activeShift ? [activeShift] : [];
+  const mappedShifts = shiftRowsSource.map((item) => {
+    if (sameId(item.id, activeShift?.id)) {
+      return mappedShift;
+    }
+    if (sameId(item.id, plannedShift?.id)) {
+      return mapShift(plannedShift, restaurantId, plannedIds);
+    }
+    return mapShift(item, restaurantId, []);
+  });
 
+  const live = getTokens() ?? tokens;
   return {
-    tokens,
+    tokens: live,
     user: {
       ...meRow,
       venue: venueName,
       restaurantName: venueName,
       restaurantId,
-      setupStep: resolveSetup(profile, halls, tables),
+      setupStep: hallsUnknown ? "done" : resolveSetup(profile, halls, tables),
       subscription: "active",
-      accessToken: tokens.accessToken,
-      refreshToken: tokens.refreshToken,
-      expiresIn: tokens.expiresIn,
+      accessToken: live?.accessToken,
+      refreshToken: live?.refreshToken,
+      expiresIn: live?.expiresIn,
     },
     snapshot: {
       version: 3,
       seq: Date.now(),
       users: people,
       venues: restaurantId
-        ? [{ id: restaurantId, name: venueName, setupStep: "done", subscription: "active" }]
+        ? [{ id: idOf(restaurantId), name: venueName, setupStep: "done", subscription: "active" }]
         : [],
       halls: mappedHalls,
       tables: mappedTables,
@@ -447,7 +467,7 @@ export async function hydrateRemote(tokens) {
       favorites: [],
       notifications: notifications.map((item) => ({
         id: item.id,
-        userId: profile.id,
+        userId: idOf(profile.id),
         title: item.title,
         body: item.message,
         kind: item.type,
@@ -455,17 +475,8 @@ export async function hydrateRemote(tokens) {
         createdAt: item.createdAt,
       })),
       history: [],
-      shifts: shiftList.map((item) => ({
-        id: idOf(item.id),
-        venueId: idOf(restaurantId),
-        date: day(item.actualStartedAt || item.scheduledStartAt),
-        start: clock(item.scheduledStartAt),
-        end: clock(item.scheduledEndAt),
-        status: item.status,
-        memberIds: sameId(item.id, mappedShift?.id) ? memberIds : [],
-        employeeCount: Number(item.employeeCount) || 0,
-      })),
-      attendance: memberIds.map((userId, index) => ({
+      shifts: mappedShifts,
+      attendance: activeIds.map((userId, index) => ({
         id: index + 1,
         shiftId: mappedShift?.id,
         userId,
@@ -473,6 +484,7 @@ export async function hydrateRemote(tokens) {
       })),
       plans: [],
       currentShiftId: mappedShift?.id ?? null,
+      problems,
     },
   };
 }
@@ -602,7 +614,7 @@ export async function setTableStatusRemote(restaurantId, { tableId, status, comm
 }
 
 export async function loadTableHistoryRemote(restaurantId, tableId) {
-  return (await request(paths.tableHistory(restaurantId, tableId))) ?? [];
+  return asList(await request(paths.tableHistory(restaurantId, tableId)));
 }
 
 export async function createTaskRemote(restaurantId, shiftId, { title, description, assigneeMembershipId, dueAt }) {
@@ -630,36 +642,43 @@ export async function moveTaskRemote(restaurantId, { taskId, status }) {
   });
 }
 
-export async function openShiftRemote(restaurantId, { start, end, membershipIds, tableIdsByMember }) {
+function scheduleFor(start, end) {
   const today = new Date();
   const [startH, startM] = String(start || "10:00").split(":").map(Number);
   const [endH, endM] = String(end || "22:00").split(":").map(Number);
   const begin = new Date(today);
-  begin.setHours(startH || 10, startM || 0, 0, 0);
+  begin.setHours(startH || 0, startM || 0, 0, 0);
   const finish = new Date(today);
-  finish.setHours(endH || 22, endM || 0, 0, 0);
-  const created = await request(paths.shifts(restaurantId), {
-    method: "POST",
-    body: { scheduledStartAt: begin.toISOString(), scheduledEndAt: finish.toISOString() },
-  });
-  const assigned = tableIdsByMember || tableIdsByMemberFromDraft();
-  if (membershipIds?.length) {
-    await request(`${paths.shifts(restaurantId)}/${created.id}/participants`, {
-      method: "PUT",
-      body: {
-        participants: membershipIds.map((membershipId) => ({
-          membershipId,
-          tableIds: assigned[membershipId] ?? [],
-        })),
-      },
-    });
+  finish.setHours(endH || 0, endM || 0, 0, 0);
+  if (finish <= begin) {
+    finish.setDate(finish.getDate() + 1);
   }
-  await request(paths.startShift(restaurantId, created.id), { method: "POST" });
+  return { scheduledStartAt: begin.toISOString(), scheduledEndAt: finish.toISOString() };
+}
+
+// Черновик (PLANNED) переиспользуется, чтобы повторное сохранение не создавало вторую смену.
+export async function saveShiftPlanRemote(restaurantId, { draftShiftId, start, end, participants, startNow }) {
+  if (!participants.length || participants.some((row) => !row.tableIds.length)) {
+    throw new Error("У каждого сотрудника смены должен быть хотя бы один стол.");
+  }
+  let shiftId = draftShiftId;
+  if (!shiftId) {
+    const created = await request(paths.shifts(restaurantId), { method: "POST", body: scheduleFor(start, end) });
+    shiftId = created.id;
+  }
+  await request(paths.shiftParticipants(restaurantId, shiftId), {
+    method: "PUT",
+    body: { participants },
+  });
   clearAssignmentDraft();
+  if (startNow) {
+    await request(paths.startShift(restaurantId, shiftId), { method: "POST" });
+  }
+  return shiftId;
 }
 
 export async function closeShiftRemote(restaurantId, shiftId, unfinishedTasks) {
-  await request(paths.closeShift(restaurantId, shiftId), {
+  return request(paths.closeShift(restaurantId, shiftId), {
     method: "POST",
     body: {
       unfinishedTasks: (unfinishedTasks ?? []).map((item) => ({
@@ -692,12 +711,21 @@ export async function createStaffRemote(restaurantId, { firstName, lastName, pos
         : {}),
     },
   });
-  rememberInvitation(invitation);
+  await rememberInvitation(invitation);
+  return invitation;
+}
+
+export async function resendInvitationRemote(restaurantId, invitationId) {
+  if (!invitationId) {
+    throw new Error("Приглашение не найдено.");
+  }
+  const invitation = await request(paths.resendInvitation(restaurantId, invitationId), { method: "POST" });
+  await rememberInvitation(invitation);
   return invitation;
 }
 
 export async function redeemInviteRemote({ token, login, password }) {
-  const tokens = await request(paths.acceptInvitation(token), {
+  const tokens = await request(paths.acceptInvitation(extractInviteToken(token)), {
     method: "POST",
     body: { login, password },
     auth: false,
