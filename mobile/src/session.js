@@ -57,9 +57,13 @@ export function SessionProvider({ children }) {
         if (Date.now() - seenAt > IDLE_MS) {
           await AsyncStorage.removeItem(USER_KEY);
         } else {
-          const restored = (await restoreLiveSession(parsed)) ?? api.publishUser(parsed.id) ?? parsed;
-          setUser(restored);
-          await persistUser(restored, Date.now());
+          const restored = await restoreLiveSession(parsed);
+          if (restored) {
+            setUser(restored);
+            await persistUser(restored, Date.now());
+          } else {
+            await AsyncStorage.removeItem(USER_KEY);
+          }
         }
       }
       setReady(true);

@@ -1,6 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { paths } from "./paths";
-import { loadTokens, saveTokens } from "./http";
+import { getTokens, loadTokens, saveTokens } from "./http";
 import {
   activateSubscriptionRemote,
   assignTableDraft,
@@ -11,21 +11,26 @@ import {
   createTableRemote,
   createTaskRemote,
   hydrateRemote,
+  loadTableHistoryRemote,
   loginRemote,
   logoutRemote,
   markAllNotificationsReadRemote,
   markNotificationReadRemote,
   moveTaskRemote,
-  openShiftRemote,
   redeemInviteRemote,
   registerRemote,
+  resendInvitationRemote,
   saveFirstHallRemote,
+  saveHallLayoutRemote,
+  saveShiftPlanRemote,
   saveVenueRemote,
   setTableStatusRemote,
   unsupported,
   updateTableRemote,
 } from "./remote";
 import { STORE_VERSION, buildView, statsFor } from "../domain/engine";
+import { plannedRunnerId, plannedWaiterId, shiftLane, shiftPlanGaps } from "../domain/shift";
+import { samePerson } from "../domain/view";
 
 const STORAGE_KEY = "rest.store.v1";
 
@@ -45,6 +50,7 @@ function emptyState() {
     attendance: [],
     plans: [],
     currentShiftId: null,
+    problems: [],
   };
 }
 
@@ -75,6 +81,12 @@ function applyLive(result) {
   return result.user;
 }
 
+function reportProblem(error) {
+  const text = String(error?.message || "Не удалось обновить данные.");
+  state = { ...state, seq: state.seq + 1, problems: [text] };
+  emit();
+}
+
 async function persistSession(user) {
   if (!user?.accessToken) {
     return user;
@@ -91,16 +103,19 @@ async function refreshLive() {
   if (!liveUser?.accessToken) {
     return liveUser;
   }
-  const result = await hydrateRemote({
-    accessToken: liveUser.accessToken,
-    refreshToken: liveUser.refreshToken,
-    expiresIn: liveUser.expiresIn,
-  });
+  const result = await hydrateRemote(getTokens());
   return persistSession(applyLive(result));
 }
 
+async function dropSession() {
+  liveUser = null;
+  state = emptyState();
+  await saveTokens(AsyncStorage, null);
+  emit();
+}
+
 function membershipOf(userId) {
-  return state.users.find((user) => user.id === userId)?.membershipId ?? userId;
+  return state.users.find((user) => samePerson(user, userId))?.membershipId ?? userId;
 }
 
 function requireVenue() {
@@ -108,6 +123,31 @@ function requireVenue() {
     throw new Error("Сначала создайте ресторан.");
   }
   return liveUser.venueId;
+}
+
+function planError(gaps) {
+  const error = new Error(`Состав не сохранён:\n${gaps.join("\n")}`);
+  error.gaps = gaps;
+  return error;
+}
+
+function shiftParticipants(memberIds) {
+  const view = buildView(state, liveUser);
+  const members = (memberIds ?? [])
+    .map((id) => state.users.find((user) => samePerson(user, id)))
+    .filter(Boolean);
+  const tables = view?.allTables ?? [];
+  const gaps = shiftPlanGaps({ members, tables });
+  if (gaps.length) {
+    throw planError(gaps);
+  }
+  return members.map((person) => {
+    const lane = shiftLane(person);
+    const tableIds = tables
+      .filter((table) => String(lane === "runner" ? plannedRunnerId(table) : plannedWaiterId(table)) === String(person.id))
+      .map((table) => table.id);
+    return { membershipId: person.membershipId, tableIds };
+  });
 }
 
 export function hydrateStore() {
@@ -137,7 +177,12 @@ export const api = {
   async refresh() {
     try {
       return await refreshLive();
-    } catch {
+    } catch (error) {
+      if (error?.status === 401) {
+        await dropSession();
+        return null;
+      }
+      reportProblem(error);
       return liveUser;
     }
   },
@@ -171,6 +216,10 @@ export const api = {
     await createStaffRemote(requireVenue(), input);
     return refreshLive();
   },
+  async resendInvite({ invitationId }) {
+    await resendInvitationRemote(requireVenue(), invitationId);
+    return refreshLive();
+  },
   async redeemInvite(input) {
     return persistSession(applyLive(await redeemInviteRemote(input)));
   },
@@ -182,7 +231,6 @@ export const api = {
   },
   async changePassword(input) {
     await changePasswordRemote(input);
-    return refreshLive();
   },
   async createHall(input) {
     const created = await createHallRemote(requireVenue(), input);
@@ -197,37 +245,48 @@ export const api = {
     await updateTableRemote(requireVenue(), input);
     return refreshLive();
   },
+  async saveHallLayout({ hallId, draft, onCreatedTable }) {
+    await saveHallLayoutRemote(requireVenue(), hallId, draft, onCreatedTable);
+    return refreshLive();
+  },
   async assignTable({ tableId, assigneeId }) {
-    const person = state.users.find((user) => String(user.id) === String(assigneeId));
-    assignTableDraft({ tableId, person });
+    const person = state.users.find((user) => samePerson(user, assigneeId));
+    const table = state.tables.find((item) => String(item.id) === String(tableId));
+    const current = table ? (shiftLane(person) === "runner" ? plannedRunnerId(table) : plannedWaiterId(table)) : null;
+    assignTableDraft({ tableId, person, release: current != null && samePerson(person, current) });
     return refreshLive();
   },
   async setTableStatus(input) {
     await setTableStatusRemote(requireVenue(), input);
     return refreshLive();
   },
-  async openShift(input) {
-    await openShiftRemote(requireVenue(), {
+  async loadTableHistory(tableId) {
+    return loadTableHistoryRemote(requireVenue(), tableId);
+  },
+  async saveShiftPlan(input) {
+    const venueId = requireVenue();
+    await saveShiftPlanRemote(venueId, {
+      draftShiftId: input.shiftId ?? null,
       start: input.start,
       end: input.end,
-      membershipIds: (input.memberIds ?? []).map(membershipOf),
+      participants: shiftParticipants(input.memberIds),
+      startNow: Boolean(input.startNow),
     });
     return refreshLive();
   },
-  async setShiftMembers(input) {
-    await openShiftRemote(requireVenue(), {
-      start: "10:00",
-      end: "22:00",
-      membershipIds: (input.memberIds ?? []).map(membershipOf),
-    });
-    return refreshLive();
+  openShift(input) {
+    return api.saveShiftPlan({ ...input, startNow: true });
+  },
+  setShiftMembers(input) {
+    return api.saveShiftPlan({ ...input, startNow: false });
   },
   leaveShift() {
     return unsupported("Самостоятельный выход из смены");
   },
   async closeShift(input) {
-    await closeShiftRemote(requireVenue(), state.currentShiftId, input.unfinishedTasks);
-    return refreshLive();
+    const result = await closeShiftRemote(requireVenue(), state.currentShiftId, input.unfinishedTasks);
+    await api.refresh();
+    return result;
   },
   async createTask(input) {
     await createTaskRemote(requireVenue(), state.currentShiftId, {
@@ -274,7 +333,7 @@ export const api = {
 };
 
 export function userName(userId) {
-  return state.users.find((user) => user.id === userId)?.fullName ?? "Сотрудник";
+  return state.users.find((user) => samePerson(user, userId))?.fullName ?? "Сотрудник";
 }
 
 export async function restoreLiveSession(storedUser) {
@@ -282,19 +341,20 @@ export async function restoreLiveSession(storedUser) {
     return storedUser;
   }
   try {
-    await saveTokens(AsyncStorage, {
-      accessToken: storedUser.accessToken,
-      refreshToken: storedUser.refreshToken,
-      expiresIn: storedUser.expiresIn,
-    });
-    const result = await hydrateRemote({
-      accessToken: storedUser.accessToken,
-      refreshToken: storedUser.refreshToken,
-      expiresIn: storedUser.expiresIn,
-    });
-    return persistSession(applyLive(result));
-  } catch {
-    return null;
+    const stored = await loadTokens(AsyncStorage);
+    const tokens = stored?.accessToken
+      ? stored
+      : { accessToken: storedUser.accessToken, refreshToken: storedUser.refreshToken, expiresIn: storedUser.expiresIn };
+    await saveTokens(AsyncStorage, tokens);
+    return persistSession(applyLive(await hydrateRemote(tokens)));
+  } catch (error) {
+    if (error?.status === 401) {
+      await saveTokens(AsyncStorage, null);
+      return null;
+    }
+    liveUser = storedUser;
+    reportProblem(error);
+    return storedUser;
   }
 }
 

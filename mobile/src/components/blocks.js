@@ -56,6 +56,22 @@ export function Metric({ value, label, onPress }) {
   );
 }
 
+export function Problems({ items }) {
+  if (!items?.length) {
+    return null;
+  }
+  return (
+    <View accessibilityRole="alert" style={styles.problems}>
+      <Text style={styles.problemsTitle}>Часть данных не загрузилась</Text>
+      {items.map((item) => (
+        <Text key={item} style={styles.problemsText}>
+          {item}
+        </Text>
+      ))}
+    </View>
+  );
+}
+
 export function Avatar({ name, size = 44 }) {
   const letter = String(name || "?").trim().charAt(0).toUpperCase();
   return (
@@ -180,5 +196,15 @@ const styles = StyleSheet.create({
     padding: 14,
     gap: 6,
   },
+  problems: {
+    backgroundColor: colors.white,
+    borderRadius: radius.row,
+    borderWidth: 2,
+    borderColor: colors.danger,
+    padding: 12,
+    gap: 4,
+  },
+  problemsTitle: { fontFamily: font.bold, fontSize: 14, color: colors.danger },
+  problemsText: { fontFamily: font.regular, fontSize: 13, lineHeight: 18, color: colors.ink },
   pressed: { transform: [{ translateX: 1 }, { translateY: 1 }] },
 });

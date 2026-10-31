@@ -49,9 +49,13 @@ must(
   setTableStatus(state, { userId: 1, tableId: 2, status: "PROBLEM", comment: "Нет салфеток" }),
   "проблема управляющего",
 );
-fail(
+must(
   setTableStatus(state, { userId: 2, tableId: 2, status: "PROBLEM", comment: "Нет салфеток" }),
-  "официант не ставит проблему",
+  "официант ставит проблему на своём столе",
+);
+fail(
+  setTableStatus(state, { userId: 2, tableId: 5, status: "PROBLEM", comment: "Нет салфеток" }),
+  "официант не ставит проблему на чужом столе",
 );
 fail(setTableStatus(state, { userId: 2, tableId: 2, status: "READY" }), "официант не ставит готов");
 fail(setTableStatus(state, { userId: 4, tableId: 2, status: "NEEDS_CLEANING" }), "раннер не убирает стол");

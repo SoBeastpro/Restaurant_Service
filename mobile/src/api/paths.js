@@ -73,8 +73,14 @@ export const paths = {
   invitations(restaurantId) {
     return `${API_PREFIX}/restaurants/${restaurantId}/invitations`;
   },
-  employees(restaurantId) {
-    return `${API_PREFIX}/restaurants/${restaurantId}/employees`;
+  resendInvitation(restaurantId, invitationId) {
+    return `${API_PREFIX}/restaurants/${restaurantId}/invitations/${invitationId}/resend`;
+  },
+  shiftParticipants(restaurantId, shiftId) {
+    return `${API_PREFIX}/restaurants/${restaurantId}/shifts/${shiftId}/participants`;
+  },
+  team(restaurantId) {
+    return `${API_PREFIX}/restaurants/${restaurantId}/team`;
   },
   skipSubscription(restaurantId) {
     return `${API_PREFIX}/restaurants/${restaurantId}/subscription/skip`;

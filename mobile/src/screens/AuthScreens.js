@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Share, StyleSheet, Text, View } from "react-native";
 import QRCode from "react-native-qrcode-svg";
 import { STAFF_ROLES } from "../domain/catalog";
+import { formatClock, formatDay } from "../domain/format";
 import { api } from "../api/store";
 import { Avatar, Choice, Panel } from "../components/blocks";
 import { useSession } from "../session";
@@ -9,6 +10,7 @@ import { colors, type as font } from "../theme";
 import { useRestaurant } from "../useRestaurant";
 import {
   emailLogin,
+  extractInviteToken,
   firstError,
   hallName,
   hoursRange,
@@ -97,28 +99,12 @@ export function RegisterScreen({ navigation }) {
 }
 
 export function ConfirmEmailScreen() {
-  const { user } = useSession();
-  const [code, setCode] = useState("");
-  const [error, setError] = useState(null);
+  const { signOut } = useSession();
   return (
-    <Screen
-      footer={
-        <Button
-          label="Подтвердить"
-          onPress={async () => {
-            try {
-              await api.confirmEmail(user.id, code);
-            } catch (caught) {
-              setError(caught.message);
-            }
-          }}
-        />
-      }
-    >
+    <Screen footer={<Button tone="ghost" label="Выйти" onPress={() => void signOut()} />}>
       <Step>Почта</Step>
       <Title>Подтверждение</Title>
-      <Lead>Подтверждение почты выполняется на сервере.</Lead>
-      <Field label="Токен" value={code} onChangeText={setCode} error={error} />
+      <Lead>Подтверждение почты в приложении: на сервере ещё нет.</Lead>
     </Screen>
   );
 }
@@ -315,7 +301,21 @@ export function InviteScreen({ navigation, route }) {
   const [lastName, setLastName] = useState("");
   const [position, setPosition] = useState("WAITER");
   const [error, setError] = useState(null);
-  const invited = (data?.people ?? []).filter((person) => person.invitationToken);
+  const [busyId, setBusyId] = useState(null);
+  const invited = (data?.people ?? []).filter((person) => person.status === "INVITED" || person.invitationToken);
+
+  async function reissue(person) {
+    setBusyId(person.id);
+    try {
+      await api.resendInvite({ invitationId: person.invitationId });
+      setError(null);
+    } catch (caught) {
+      setError(caught.message);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   return (
     <Screen
       scroll
@@ -326,7 +326,10 @@ export function InviteScreen({ navigation, route }) {
       {!setup && navigation?.canGoBack() ? <BackLink onPress={() => navigation.goBack()} /> : null}
       {setup ? <Step>5 из 5</Step> : null}
       <Title>Приглашение</Title>
-      <Lead>Ссылка и QR создаются сразу. Сотрудник задаёт логин и пароль по этой ссылке.</Lead>
+      <Lead>
+        Ссылка и QR создаются сразу. Сотрудник задаёт логин и пароль по этой ссылке. Сервер показывает ссылку только один
+        раз, поэтому она хранится на этом телефоне до конца срока действия.
+      </Lead>
       {!setup ? (
         <>
           <Field label="Имя" value={firstName} onChangeText={setFirstName} capitalize="words" maxLength={100} />
@@ -358,21 +361,41 @@ export function InviteScreen({ navigation, route }) {
           />
         </>
       ) : null}
+      {setup && error ? <Text style={styles.error}>{error}</Text> : null}
       {invited.map((person) => (
         <Panel key={person.id}>
           <Text style={styles.name}>{person.fullName}</Text>
-          <Text style={styles.code}>{person.invitationUrl}</Text>
-          <Button
-            tone="ghost"
-            label="Поделиться ссылкой"
-            onPress={() => {
-              void Share.share({ message: person.invitationUrl });
-            }}
-          />
-          <Text style={styles.meta}>{person.inviteUses ? "Приглашение принято" : "Ожидает сотрудника"}</Text>
-          <View style={styles.qr}>
-            <QRCode value={person.qrContent} size={140} color={colors.ink} backgroundColor={colors.paper} />
-          </View>
+          {person.invitationUrl ? (
+            <>
+              <Text style={styles.code}>{person.invitationUrl}</Text>
+              <Button
+                tone="ghost"
+                label="Поделиться ссылкой"
+                onPress={() => {
+                  void Share.share({ message: person.invitationUrl });
+                }}
+              />
+            </>
+          ) : (
+            <Text style={styles.meta}>Ссылки на этом телефоне нет: сервер отдаёт её только при выпуске.</Text>
+          )}
+          <Text style={styles.meta}>
+            {person.inviteUses ? "Приглашение принято" : "Ожидает сотрудника"}
+            {person.inviteExpiresAt ? `, действует до ${formatDay(person.inviteExpiresAt)} ${formatClock(person.inviteExpiresAt)}` : ""}
+          </Text>
+          {person.qrContent ? (
+            <View style={styles.qr}>
+              <QRCode value={person.qrContent} size={140} color={colors.ink} backgroundColor={colors.paper} />
+            </View>
+          ) : null}
+          {person.invitationId && !person.inviteUses ? (
+            <Button
+              tone="ghost"
+              label={busyId === person.id ? "Выпускаем" : "Перевыпустить"}
+              disabled={busyId === person.id}
+              onPress={() => void reissue(person)}
+            />
+          ) : null}
         </Panel>
       ))}
       {!invited.length ? <Lead>Сначала добавьте сотрудника. Код появится здесь.</Lead> : null}
@@ -401,6 +424,7 @@ export function JoinScreen({ navigation }) {
                 setError(message);
                 return;
               }
+              setToken(extractInviteToken(token));
               setError(null);
               setStep("account");
             }}
@@ -429,7 +453,7 @@ export function JoinScreen({ navigation }) {
       <Title>Приглашение в команду</Title>
       {step === "token" ? (
         <>
-          <Lead>Вставьте токен из ссылки. Регистр важен.</Lead>
+          <Lead>Вставьте ссылку rest://invite/… целиком или только токен. Регистр важен.</Lead>
           <Field label="Токен приглашения" value={token} onChangeText={setToken} error={error} maxLength={200} />
         </>
       ) : (
@@ -443,68 +467,12 @@ export function JoinScreen({ navigation }) {
   );
 }
 
-export function ResetPasswordScreen({ navigation, route }) {
-  const [login, setLogin] = useState(route.params?.email ?? "");
-  const [token, setToken] = useState("");
-  const [password, setPassword] = useState("");
-  const [asked, setAsked] = useState(false);
-  const [issued, setIssued] = useState(null);
-  const [error, setError] = useState(null);
-  const [done, setDone] = useState(false);
+export function ResetPasswordScreen({ navigation }) {
   return (
-    <Screen
-      scroll
-      footer={
-        <Button
-          label="Задать пароль"
-          onPress={async () => {
-            const message = firstError(inviteToken(token), passwordValue(password, "новый пароль"));
-            if (message) {
-              setError(message);
-              return;
-            }
-            try {
-              await api.resetPassword({ token, newPassword: password });
-              setDone(true);
-              setError(null);
-            } catch (caught) {
-              setError(caught.message);
-            }
-          }}
-        />
-      }
-    >
+    <Screen>
       <BackLink onPress={() => navigation.goBack()} />
       <Title>Новый пароль</Title>
-      <Lead>Сброс пароля выполняется только через сервер.</Lead>
-      <Field label="Почта или логин" value={login} onChangeText={setLogin} />
-      <Button
-        tone="ghost"
-        label="Получить токен"
-        onPress={async () => {
-          const message = loginValue(login, "почту или логин");
-          if (message) {
-            setError(message);
-            return;
-          }
-          try {
-            const result = await api.forgotPassword({ login });
-            setAsked(true);
-            setIssued(result.token);
-            if (result.token) {
-              setToken(result.token);
-            }
-            setError(null);
-          } catch (caught) {
-            setError(caught.message);
-          }
-        }}
-      />
-      {asked && issued ? <Lead>Токен восстановления: {issued}</Lead> : null}
-      {asked && !issued ? <Lead>Для этой учётки токен не выдан.</Lead> : null}
-      <Field label="Токен" value={token} onChangeText={setToken} maxLength={200} />
-      <Field label="Новый пароль" value={password} onChangeText={setPassword} secure error={error} maxLength={72} />
-      {done ? <Lead>Пароль обновлён. Можно входить.</Lead> : null}
+      <Lead>Восстановление и сброс пароля: на сервере ещё нет.</Lead>
     </Screen>
   );
 }

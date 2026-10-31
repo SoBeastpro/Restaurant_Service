@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { TABLE_STATUSES, roleLabel } from "../domain/catalog";
 import { formatClock, formatDay } from "../domain/format";
 import { api } from "../api/store";
 import { useSession } from "../session";
 import { Avatar, Choice, Panel } from "../components/blocks";
+import { HallWorkspace } from "../components/hall/HallWorkspace";
 import { colors, radius, shadow, space, type as font } from "../theme";
 import { useRestaurant } from "../useRestaurant";
 import { firstError, passwordValue } from "../validation";
@@ -13,6 +14,7 @@ import { BackLink, Button, Field, Lead, Screen, Title } from "../ui";
 export function MoreScreen({ navigation }) {
   const { signOut } = useSession();
   const data = useRestaurant();
+  const [hallsOpen, setHallsOpen] = useState(false);
   if (!data) {
     return null;
   }
@@ -20,22 +22,13 @@ export function MoreScreen({ navigation }) {
   const unread = data.notifications.filter((item) => !item.read).length;
 
   return (
-    <Screen
+    <>
+      <Screen
       scroll
       footer={
         <>
-          {data.shift ? (
-            <Button
-              label="Завершить смену"
-              onPress={async () => {
-                if (manager) {
-                  navigation.navigate("ShiftClose");
-                  return;
-                }
-                await api.leaveShift(data.me.id);
-                void signOut();
-              }}
-            />
+          {data.shift && manager ? (
+            <Button label="Завершить смену" onPress={() => navigation.navigate("ShiftClose")} />
           ) : manager ? (
             <Button label="Открыть смену" onPress={() => navigation.navigate("ShiftOpen")} />
           ) : null}
@@ -54,11 +47,17 @@ export function MoreScreen({ navigation }) {
         </View>
       </Panel>
       <Text style={styles.meta}>{data.me.email || `Логин ${data.me.username}`}</Text>
+      {data.shift && !manager ? (
+        <Text style={styles.meta}>Смену закрывает управляющий. Самостоятельный выход из смены: на сервере ещё нет.</Text>
+      ) : null}
       <MenuRow label="Уведомления" body={unread ? `Новых: ${unread}` : "Всё прочитано"} onPress={() => navigation.navigate("Notifications")} />
+      {manager ? <MenuRow label="Залы" body="Расстановка столов и интерьер" onPress={() => setHallsOpen(true)} /> : null}
       {manager ? <MenuRow label="Команда" body="Сотрудники, роли и приглашения" onPress={() => navigation.navigate("Team")} /> : null}
       {manager ? <MenuRow label="Статистика" body="День, неделя, месяц" onPress={() => navigation.navigate("Stats")} /> : null}
       <MenuRow label="Сменить пароль" body="Текущий и новый, от 8 символов" onPress={() => navigation.navigate("Password")} />
-    </Screen>
+      </Screen>
+      {hallsOpen ? <HallWorkspace data={data} onClose={() => setHallsOpen(false)} /> : null}
+    </>
   );
 }
 
@@ -145,11 +144,12 @@ function Stat({ label, value }) {
 }
 
 export function PasswordScreen({ navigation }) {
+  const { signOut } = useSession();
   const data = useRestaurant();
   const [current, setCurrent] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState(null);
-  const [done, setDone] = useState(false);
+  const [busy, setBusy] = useState(false);
   if (!data) {
     return null;
   }
@@ -158,24 +158,36 @@ export function PasswordScreen({ navigation }) {
       scroll
       footer={
         <Button
-          label="Сохранить"
+          label={busy ? "Сохраняем" : "Сохранить"}
+          disabled={busy}
           onPress={async () => {
+            const message = firstError(
+              current ? null : "Введите текущий пароль.",
+              passwordValue(password, "новый пароль"),
+            );
+            if (message) {
+              setError(message);
+              return;
+            }
+            setBusy(true);
             try {
               await api.changePassword({ userId: data.me.id, currentPassword: current, newPassword: password });
-              setDone(true);
-              setError(null);
             } catch (caught) {
               setError(caught.message);
+              setBusy(false);
+              return;
             }
+            Alert.alert("Пароль обновлён", "Сервер завершил все сессии. Войдите с новым паролем.");
+            void signOut();
           }}
         />
       }
     >
       <BackLink onPress={() => navigation.goBack()} />
       <Title>Новый пароль</Title>
+      <Lead>После смены пароля сервер завершит все сессии — придётся войти заново.</Lead>
       <Field label="Текущий пароль" value={current} onChangeText={setCurrent} secure />
-      <Field label="Новый пароль" value={password} onChangeText={setPassword} secure error={error} />
-      {done ? <Lead>Пароль обновлён.</Lead> : null}
+      <Field label="Новый пароль" value={password} onChangeText={setPassword} secure error={error} maxLength={72} />
     </Screen>
   );
 }

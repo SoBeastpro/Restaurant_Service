@@ -15,7 +15,7 @@ import {
   StaffSetupScreen,
   VenueScreen,
 } from "../screens/AuthScreens";
-import { HallScreen, HistoryScreen, TableEditScreen, TableScreen } from "../screens/HallScreens";
+import { HallScreen, HistoryScreen, TableScreen } from "../screens/HallScreens";
 import { LoginScreen } from "../screens/LoginScreen";
 import { MoreScreen, NotificationsScreen, PasswordScreen, StatsScreen } from "../screens/MoreScreens";
 import { OnboardingScreen } from "../screens/OnboardingScreen";
@@ -140,7 +140,6 @@ function sharedScreens() {
   return (
     <>
       <AppStack.Screen name="Table" component={TableScreen} />
-      <AppStack.Screen name="TableEdit" component={TableEditScreen} />
       <AppStack.Screen name="History" component={HistoryScreen} />
       <AppStack.Screen name="Task" component={TaskDetailScreen} />
       <AppStack.Screen name="TaskForm" component={TaskFormScreen} />
